@@ -1,0 +1,477 @@
+ENTRY_AC	ENTRY_TYPE	ENTRY_NAME
+IPR018117	Active_site	DNA methylase, C-5 cytosine-specific, active site
+IPR023005	Active_site	Nucleoside diphosphate kinase, active site
+IPR000048	Binding_site	IQ motif, EF-hand binding site
+IPR002355	Binding_site	Multicopper oxidase, copper-binding site
+IPR018195	Binding_site	Transferrin family, iron binding site
+IPR018247	Binding_site	EF-Hand 1, calcium-binding site
+IPR018349	Binding_site	Peptidase M24A, methionine aminopeptidase, subfamily 2, binding site
+IPR000047	Conserved_site	Helix-turn-helix motif
+IPR000637	Conserved_site	HMG-I/HMG-Y, DNA-binding, conserved site
+IPR001827	Conserved_site	Homeobox protein, antennapedia type, conserved site
+IPR003956	Conserved_site	Transcription factor, NFYB/HAP3, conserved site
+IPR017907	Conserved_site	Zinc finger, RING-type, conserved site
+IPR017956	Conserved_site	AT hook, DNA-binding motif
+IPR017970	Conserved_site	Homeobox, conserved site
+IPR018122	Conserved_site	Fork head domain conserved site1
+IPR018186	Conserved_site	Transcription factor, T-box, conserved site
+IPR018350	Conserved_site	Transcription factor COE, conserved site
+IPR018359	Conserved_site	Bromodomain, conserved site
+IPR018362	Conserved_site	CCAAT-binding factor, conserved site
+IPR019041	Conserved_site	SSXRD motif
+IPR019737	Conserved_site	Homeobox engrailed-type, conserved site
+IPR019739	Conserved_site	CTF transcription factor/nuclear factor 1, conserved site
+IPR019786	Conserved_site	Zinc finger, PHD-type, conserved site
+IPR019817	Conserved_site	Interferon regulatory factor, conserved site
+IPR022652	Conserved_site	Zinc finger, XPA-type, conserved site
+IPR022658	Conserved_site	XPA, conserved site
+IPR023058	Conserved_site	Peptidyl-prolyl cis-trans isomerase, PpiC-type, conserved site
+IPR023486	Conserved_site	Transcription factor TFIIB, conserved site
+IPR023779	Conserved_site	Chromo domain, conserved site
+IPR030491	Conserved_site	TATA-box binding protein, conserved site
+IPR030492	Conserved_site	Rel homology domain, conserved site
+IPR000008	Domain	C2 domain
+IPR000014	Domain	PAS domain
+IPR000195	Domain	Rab-GTPase-TBC domain
+IPR000198	Domain	Rho GTPase-activating protein domain
+IPR000210	Domain	BTB/POZ domain
+IPR000232	Domain	Heat shock factor (HSF)-type, DNA-binding
+IPR000253	Domain	Forkhead-associated (FHA) domain
+IPR000297	Domain	Peptidyl-prolyl cis-trans isomerase, PpiC-type
+IPR000306	Domain	FYVE zinc finger
+IPR000313	Domain	PWWP domain
+IPR000327	Domain	POU-specific domain
+IPR000330	Domain	SNF2-related, N-terminal domain
+IPR000418	Domain	Ets domain
+IPR000421	Domain	Coagulation factor 5/8 C-terminal domain
+IPR000433	Domain	Zinc finger, ZZ-type
+IPR000467	Domain	G-patch domain
+IPR000488	Domain	Death domain
+IPR000504	Domain	RNA recognition motif domain
+IPR000536	Domain	Nuclear hormone receptor, ligand-binding domain
+IPR000555	Domain	JAB1/MPN/MOV34 metalloenzyme domain
+IPR000571	Domain	Zinc finger, CCCH-type
+IPR000626	Domain	Ubiquitin-like domain
+IPR000679	Domain	Zinc finger, GATA-type
+IPR000747	Domain	Homeobox domain engrailed
+IPR000770	Domain	SAND domain
+IPR000818	Domain	TEA/ATTS domain
+IPR000834	Domain	Peptidase M14, carboxypeptidase A
+IPR000949	Domain	ELM2 domain
+IPR000953	Domain	Chromo/chromo shadow domain
+IPR000967	Domain	Zinc finger, NF-X1-type
+IPR000976	Domain	Wilm's tumour protein, N-terminal
+IPR000980	Domain	SH2 domain
+IPR000994	Domain	Peptidase M24
+IPR001005	Domain	SANT/Myb domain
+IPR001025	Domain	Bromo adjacent homology (BAH) domain
+IPR001132	Domain	SMAD domain, Dwarfin-type
+IPR001156	Domain	Transferrin-like domain
+IPR001202	Domain	WW domain
+IPR001214	Domain	SET domain
+IPR001275	Domain	DM DNA-binding domain
+IPR001346	Domain	Interferon regulatory factor DNA-binding domain
+IPR001356	Domain	Homeobox domain
+IPR001374	Domain	R3H domain
+IPR001487	Domain	Bromodomain
+IPR001523	Domain	Paired domain
+IPR001584	Domain	Integrase, catalytic core
+IPR001606	Domain	ARID DNA-binding domain
+IPR001628	Domain	Zinc finger, nuclear hormone receptor-type
+IPR001650	Domain	Helicase, C-terminal
+IPR001660	Domain	Sterile alpha motif domain
+IPR001739	Domain	Methyl-CpG DNA binding
+IPR001766	Domain	Fork head domain
+IPR001781	Domain	Zinc finger, LIM-type
+IPR001810	Domain	F-box domain
+IPR001841	Domain	Zinc finger, RING-type
+IPR001876	Domain	Zinc finger, RanBP2-type
+IPR001878	Domain	Zinc finger, CCHC-type
+IPR001909	Domain	Krueppel-associated box
+IPR001965	Domain	Zinc finger, PHD-type
+IPR002048	Domain	EF-hand domain
+IPR002059	Domain	Cold-shock protein, DNA-binding
+IPR002100	Domain	Transcription factor, MADS-box
+IPR002546	Domain	Myogenic basic muscle-specific protein
+IPR002713	Domain	FF domain
+IPR002717	Domain	Histone acetyltransferase domain, MYST-type
+IPR002857	Domain	Zinc finger, CXXC-type
+IPR002867	Domain	IBR domain
+IPR002893	Domain	Zinc finger, MYND-type
+IPR002909	Domain	IPT domain
+IPR002999	Domain	Tudor domain
+IPR003034	Domain	SAP domain
+IPR003102	Domain	Coactivator CBP, pKID
+IPR003118	Domain	Pointed domain
+IPR003150	Domain	DNA-binding RFX-type winged-helix domain
+IPR003265	Domain	HhH-GPD domain
+IPR003309	Domain	SCAN domain
+IPR003316	Domain	E2F/DP family, winged-helix DNA-binding domain
+IPR003327	Domain	Leucine zipper, Myc
+IPR003347	Domain	JmjC domain
+IPR003349	Domain	JmjN domain
+IPR003350	Domain	CUT domain
+IPR003380	Domain	SKI/SNO/DAC domain
+IPR003593	Domain	AAA+ ATPase domain
+IPR003604	Domain	Matrin/U1-C-like, C2H2-type zinc finger
+IPR003616	Domain	Post-SET domain
+IPR003619	Domain	MAD homology 1, Dwarfin-type
+IPR003650	Domain	Orange domain
+IPR003652	Domain	Ataxin, AXH domain
+IPR003654	Domain	OAR domain
+IPR003655	Domain	Krueppel-associated box-related
+IPR003656	Domain	Zinc finger, BED-type
+IPR003888	Domain	FY-rich, N-terminal
+IPR003889	Domain	FY-rich, C-terminal
+IPR003893	Domain	Iroquois-class homeodomain protein
+IPR003902	Domain	Transcription regulator GCM domain
+IPR003958	Domain	Transcription factor CBF/NF-Y/archaeal histone domain
+IPR004012	Domain	RUN domain
+IPR004198	Domain	Zinc finger, C5HC2-type
+IPR004826	Domain	Basic leucine zipper domain, Maf-type
+IPR004827	Domain	Basic-leucine zipper domain
+IPR004865	Domain	HSR domain
+IPR004875	Domain	DDE superfamily endonuclease domain
+IPR005172	Domain	CRC domain
+IPR005173	Domain	DMRTA motif
+IPR005542	Domain	PBX
+IPR005559	Domain	CG-1 DNA-binding domain
+IPR005612	Domain	CCAAT-binding factor
+IPR005643	Domain	Jun-like transcription factor
+IPR006115	Domain	6-phosphogluconate dehydrogenase, NADP-binding
+IPR006134	Domain	DNA-directed DNA polymerase, family B, multifunctional domain
+IPR006560	Domain	AWS domain
+IPR006600	Domain	HTH CenpB-type DNA-binding domain
+IPR006608	Domain	Domain of unknown function DM14
+IPR006612	Domain	THAP-type zinc finger
+IPR006711	Domain	Hox9, N-terminal activation domain
+IPR006715	Domain	PEA3-type ETS-domain transcription factor, N-terminal
+IPR006794	Domain	Transcriptional activator, Zfx / Zfy domain
+IPR006820	Domain	Caudal-like activation domain
+IPR006897	Domain	Hepatocyte nuclear factor 1, beta isoform, C-terminal
+IPR006898	Domain	Hepatocyte nuclear factor 1, alpha isoform C-terminal
+IPR006899	Domain	Hepatocyte nuclear factor 1, N-terminal
+IPR007513	Domain	Uncharacterised protein family SERF, N-terminal
+IPR007526	Domain	SWIRM domain
+IPR007527	Domain	Zinc finger, SWIM-type
+IPR007588	Domain	Zinc finger, FLYWCH-type
+IPR007604	Domain	CP2 transcription factor
+IPR007668	Domain	RFX1 transcription activation region
+IPR007728	Domain	Pre-SET domain
+IPR007889	Domain	DNA binding HTH domain, Psq-type
+IPR008013	Domain	GATA-type transcription activator, N-terminal
+IPR008121	Domain	Transcription factor AP-2 alpha, N-terminal
+IPR008422	Domain	Homeobox KN domain
+IPR008598	Domain	Drought induced 19 protein type, zinc-binding domain
+IPR008906	Domain	HAT, C-terminal dimerisation domain
+IPR009071	Domain	High mobility group box domain
+IPR010011	Domain	Domain of unknown function DUF1518
+IPR010506	Domain	DMAP1-binding domain
+IPR010533	Domain	Vertebrate interleukin-3 regulated transcription factor
+IPR010542	Domain	Vertebrate heat shock transcription factor, C-terminal domain
+IPR010578	Domain	Single-minded, C-terminal
+IPR010912	Domain	Spen paralogue/orthologue C-terminal, metazoa
+IPR010991	Domain	p53, tetramerisation domain
+IPR011129	Domain	Cold shock domain
+IPR011539	Domain	Rel homology domain (RHD), DNA-binding domain
+IPR011598	Domain	Myc-type, basic helix-loop-helix (bHLH) domain
+IPR011615	Domain	p53, DNA-binding domain
+IPR012642	Domain	Transcription regulator Wos2-domain
+IPR012682	Domain	Transcription regulator Myc, N-terminal
+IPR012921	Domain	Spen paralogue and orthologue SPOC, C-terminal
+IPR012934	Domain	Zinc finger, AD-type
+IPR012955	Domain	CASP, C-terminal
+IPR013019	Domain	MAD homology, MH1
+IPR013087	Domain	Zinc finger C2H2-type
+IPR013137	Domain	Zinc finger, TFIIB-type
+IPR013150	Domain	Transcription factor TFIIB, cyclin-like domain
+IPR013520	Domain	Exonuclease, RNase T/DNA polymerase III
+IPR013524	Domain	Runt domain
+IPR013558	Domain	CTNNB1 binding, N-teminal
+IPR013592	Domain	Maf transcription factor, N-terminal
+IPR013637	Domain	Lysine-specific demethylase-like domain
+IPR013638	Domain	Fork-head N-terminal
+IPR013655	Domain	PAS fold-3
+IPR013681	Domain	Myelin transcription factor 1
+IPR013711	Domain	Runx, C-terminal  domain
+IPR013763	Domain	Cyclin-like
+IPR013767	Domain	PAS fold
+IPR013799	Domain	STAT transcription factor, protein interaction
+IPR013800	Domain	STAT transcription factor, all-alpha domain
+IPR013801	Domain	STAT transcription factor, DNA-binding
+IPR013847	Domain	POU domain
+IPR013851	Domain	Transcription factor Otx, C-terminal
+IPR013854	Domain	Transcription factor AP-2, C-terminal
+IPR013867	Domain	Telomere repeat-binding factor, dimerisation domain
+IPR013872	Domain	p53 transactivation domain
+IPR014001	Domain	Helicase superfamily 1/2, ATP-binding domain
+IPR014012	Domain	Helicase/SANT-associated domain
+IPR014720	Domain	Double-stranded RNA-binding domain
+IPR014878	Domain	Domain of unknown function DUF1794
+IPR014887	Domain	HIF-1 alpha, transactivation domain, C-terminal
+IPR014889	Domain	Transcription factor DP, C-terminal
+IPR014890	Domain	c-SKI SMAD4-binding domain
+IPR014920	Domain	Nuclear receptor coactivator, Ncoa-type, interlocking
+IPR014935	Domain	Nuclear receptor coactivator, receptor-binding domain
+IPR015115	Domain	Centromere protein CENP-B, C-terminal domain
+IPR015155	Domain	PLAA family ubiquitin binding domain
+IPR015350	Domain	Beta-trefoil DNA-binding domain
+IPR015351	Domain	RBP-J/Cbf11/Cbf12, DNA binding
+IPR015395	Domain	C-myb, C-terminal
+IPR017455	Domain	Zinc finger, FYVE-related
+IPR017877	Domain	Myb-like domain
+IPR017884	Domain	SANT domain
+IPR017930	Domain	Myb domain
+IPR017984	Domain	Chromo domain subgroup
+IPR017986	Domain	WD40-repeat-containing domain
+IPR018379	Domain	BEN domain
+IPR018501	Domain	DDT domain
+IPR018533	Domain	Forkhead box protein, C-terminal
+IPR018586	Domain	Brinker DNA-binding domain
+IPR018957	Domain	Zinc finger, C3HC4 RING-type
+IPR019102	Domain	HMG box transcription factor BBX, domain of unknown function DUF2028
+IPR019447	Domain	DNA/RNA-binding protein Kin17, conserved domain
+IPR019471	Domain	Interferon regulatory factor-3
+IPR019485	Domain	V(D)J recombination-activating protein 1, Zinc finger
+IPR019525	Domain	Nuclear respiratory factor 1, NLS/DNA-binding, dimerisation domain
+IPR019526	Domain	Nuclear respiratory factor-1, activation binding domain
+IPR019548	Domain	CTF transcription factor/nuclear factor 1, N-terminal
+IPR019549	Domain	Homeobox engrailed, C-terminal
+IPR019787	Domain	Zinc finger, PHD-finger
+IPR019844	Domain	Cold-shock (CSD) domain
+IPR020479	Domain	Homeobox domain, metazoa
+IPR020542	Domain	Aspartate carbamoyltransferase regulatory subunit, C-terminal
+IPR020604	Domain	CTF transcription factor/nuclear factor 1, DNA-binding domain
+IPR020683	Domain	Ankyrin repeat-containing domain
+IPR021064	Domain	Estrogen receptor beta, N-terminal
+IPR021565	Domain	Rabenosyn, Rab binding domain
+IPR021623	Domain	Lamina-associated polypeptide 2 alpha, C-terminal
+IPR021780	Domain	Nuclear/hormone receptor activator site AF-1
+IPR021786	Domain	Pre-mRNA splicing factor component Cdc5p/Cef1
+IPR021802	Domain	MiT/TFE transcription factors, C-terminal
+IPR021849	Domain	Early growth response, N-terminal
+IPR021918	Domain	Domain of unknown function DUF3528, homeobox protein, eukaryotic
+IPR021934	Domain	Sox, C-terminal
+IPR021987	Domain	SLED domain
+IPR022032	Domain	Myogenic determination factor 5
+IPR022056	Domain	CpG binding protein, C-terminal
+IPR022067	Domain	Homeobox protein Hox1A3 N-terminal
+IPR022084	Domain	Transcription factor Elf, N-terminal
+IPR022091	Domain	TATA element modulatory factor 1, TATA binding
+IPR022102	Domain	Holliday junction regulator protein family C-terminal
+IPR022106	Domain	Paired box protein 7, C-terminal
+IPR022130	Domain	Paired-box protein 2 C-terminal
+IPR022135	Domain	Distal-less-like homeobox protein, N-terminal domain
+IPR022151	Domain	Sox developmental protein N-terminal
+IPR022255	Domain	Domain of unknown function DUF3776
+IPR022575	Domain	Neurogenic differentiation factor, domain of unknown function
+IPR022582	Domain	Transcription factor, T-box, region of unknown function
+IPR022590	Domain	Peroxisome proliferator-activated receptor gamma, N-terminal
+IPR022656	Domain	XPA, C-terminal
+IPR022702	Domain	DNA (cytosine-5)-methyltransferase 1, replication foci domain
+IPR022752	Domain	Signal transducer and activation of transcription 1, TAZ2 binding domain, C-terminal
+IPR022755	Domain	Zinc finger, double-stranded RNA binding
+IPR022756	Domain	Signal transducer and activation of transcription 2, C-terminal
+IPR023082	Domain	Homeo-prospero domain
+IPR023334	Domain	REKLES domain
+IPR023336	Domain	RAG nonamer-binding domain
+IPR023339	Domain	CVC domain
+IPR023780	Domain	Chromo domain
+IPR024061	Domain	NDT80 DNA-binding domain
+IPR024578	Domain	Homez, homeobox domain
+IPR024668	Domain	GA-binding protein alpha subunit, N-terminal
+IPR024736	Domain	Oestrogen-type nuclear receptor final C-terminal domain
+IPR024779	Domain	2OGFeDO, oxygenase domain
+IPR025151	Domain	ELYS-like domain
+IPR025243	Domain	Domain of unknown function DUF4195
+IPR025281	Domain	Domain of unknown function DUF4074
+IPR025398	Domain	Domain of unknown function DUF4371
+IPR025451	Domain	Domain of unknown function DUF4211
+IPR025687	Domain	C4-type zinc-finger of DNA polymerase delta
+IPR025719	Domain	Myelin gene regulatory factor C-terminal domain 2
+IPR025750	Domain	Requiem/DPF N-terminal domain
+IPR025789	Domain	Histone-lysine N-methyltransferase DOT1 domain
+IPR025884	Domain	Methyl-CpG binding protein 2/3, C-terminal domain
+IPR025894	Domain	Polycomb-like MTF2 factor 2, C-terminal domain
+IPR026932	Domain	Myelin gene regulatory factor C-terminal domain 1
+IPR028002	Domain	Myb/SANT-like DNA-binding domain
+IPR028187	Domain	STAT6, C-terminal
+IPR028942	Domain	WHIM1 domain
+IPR029154	Domain	3-hydroxyisobutyrate dehydrogenase, NAD-binding domain
+IPR029279	Domain	FLYWCH-type zinc finger-containing protein, N-terminal
+IPR029298	Domain	RFX5, C-terminal
+IPR030392	Domain	Intramolecular chaperone auto-processing domain
+IPR041661	Domain	ZN622/Rei1/Reh1, zinc finger C2H2-type
+IPR000003	Family	Retinoid X receptor/HNF4
+IPR000040	Family	Acute myeloid leukemia 1 protein (AML1)/Runt
+IPR000079	Family	High mobility group protein HMGN
+IPR000116	Family	High mobility group protein HMGA
+IPR000128	Family	Progesterone receptor
+IPR000324	Family	Vitamin D receptor
+IPR000451	Family	NF-kappa-B/Dorsal
+IPR000465	Family	XPA
+IPR000580	Family	TSC-22 / Dip / Bun
+IPR000647	Family	CTF transcription factor/nuclear factor 1
+IPR000754	Family	Ribosomal protein S9
+IPR000812	Family	Transcription factor TFIIB
+IPR000814	Family	TATA-box binding protein
+IPR000837	Family	AP-1 transcription factor
+IPR000972	Family	Octamer-binding transcription factor
+IPR001067	Family	Nuclear translocator
+IPR001103	Family	Androgen receptor
+IPR001289	Family	Nuclear transcription factor Y subunit A
+IPR001292	Family	Oestrogen receptor
+IPR001321	Family	Hypoxia-inducible factor-1 alpha
+IPR001409	Family	Glucocorticoid receptor
+IPR001525	Family	C-5 cytosine methyltransferase
+IPR001564	Family	Nucleoside diphosphate kinase
+IPR001630	Family	cAMP response element binding (CREB) protein
+IPR001699	Family	Transcription factor, T-box
+IPR001723	Family	Nuclear hormone receptor
+IPR001728	Family	Thyroid hormone receptor
+IPR001806	Family	Small GTPase
+IPR002070	Family	Transcription factor, Brachyury
+IPR002112	Family	Transcription factor Jun
+IPR002117	Family	p53 tumour suppressor family
+IPR002418	Family	Transcription regulator Myc
+IPR003022	Family	Transcription factor Otx2
+IPR003025	Family	Transcription factor Otx
+IPR003026	Family	Transcription factor Otx1
+IPR003070	Family	Orphan nuclear receptor
+IPR003071	Family	Orphan nuclear receptor, HMR type
+IPR003072	Family	Orphan nuclear receptor, NOR1 type
+IPR003073	Family	Orphan nuclear receptor, NURR type
+IPR003074	Family	Peroxisome proliferator-activated receptor
+IPR003075	Family	Peroxisome proliferator-activated receptor, beta
+IPR003076	Family	Peroxisome proliferator-activated receptor alpha
+IPR003077	Family	Peroxisome proliferator-activated receptor gamma
+IPR003078	Family	Retinoic acid receptor
+IPR003079	Family	Nuclear receptor ROR
+IPR003690	Family	Transcription termination factor, mitochondrial/chloroplastic
+IPR003980	Family	Histamine H3 receptor
+IPR004130	Family	GPN-loop GTPase
+IPR004545	Family	PA2G4 family
+IPR005552	Family	Scramblase
+IPR006628	Family	Purine-rich element binding protein family
+IPR007071	Family	A-kinase anchoring protein 95 (AKAP95)
+IPR007964	Family	MICOS complex subunit MIC19/MIC25
+IPR008087	Family	Autoimmune regulator, AIRE
+IPR008122	Family	Transcription factor AP-2 beta
+IPR008123	Family	Transcription factor AP-2 gamma
+IPR008366	Family	Nuclear factor of activated T cells (NFAT)
+IPR009170	Family	Predicted retinoblastoma binding protein (RIZ)
+IPR012462	Family	Peptidase C78, ubiquitin fold modifier-specific peptidase 1/ 2
+IPR015389	Family	POU, class 2, associating factor 1
+IPR015648	Family	Transcription factor DP
+IPR016233	Family	Homeobox protein Pitx/unc30
+IPR016311	Family	Transforming protein C-ets
+IPR016312	Family	Transcription factor, GA-binding, alpha subunit
+IPR016355	Family	Nuclear hormone receptor family 5
+IPR016357	Family	Transferrin
+IPR016361	Family	Transcriptional enhancer factor, metazoa
+IPR016362	Family	POU-domain transcription factor, class 3
+IPR016374	Family	Transcription factor, GATA-2/3
+IPR016375	Family	Transcription factor GATA-4/5/6
+IPR016378	Family	Transcription factor cyclic AMP-dependent, CRE-BP1-type
+IPR016468	Family	CCAAT/enhancer-binding protein, chordates
+IPR016554	Family	Runt-related transcription factor RUNX
+IPR016569	Family	Methyltransferase, trithorax
+IPR016637	Family	Neurogenic differentiation factor NeuroD
+IPR016659	Family	Transcription factor II-I
+IPR016670	Family	DNA damage-inducible transcript 3
+IPR016743	Family	Nuclear factor interleukin-3-regulated protein
+IPR017112	Family	Homeobox protein HXA9/HXB9/HXC9
+IPR017114	Family	C2H2-type Zinc finger protein,  YY-1-like
+IPR017124	Family	PR-domain zinc finger protein PRDM4
+IPR017125	Family	PR-domain zinc finger protein PRDM5-like
+IPR017126	Family	PR-domain zinc finger protein PRDM12
+IPR017198	Family	DNA (cytosine-5)-methyltransferase 1-like
+IPR017253	Family	Transcription factor SRY
+IPR017352	Family	Methyl-CpG-binding domain protein 4
+IPR017353	Family	Methyl-CpG binding protein MeCP2
+IPR017357	Family	Telomeric repeat-binding factor 1/2
+IPR017426	Family	Nuclear receptor coactivator
+IPR017431	Family	Interferon regulatory factor-1/2
+IPR017987	Family	Wilm's tumour protein
+IPR017995	Family	Homeobox protein, antennapedia type
+IPR019320	Family	BLOC-1-related complex subunit 8
+IPR021169	Family	Histone H3-K79 methyltransferase, metazoa
+IPR021281	Family	Small nuclear RNA activating complex subunit 2-like
+IPR021537	Family	Hypoxia-inducible factor, alpha subunit
+IPR022092	Family	TATA element modulatory factor 1 DNA binding
+IPR022097	Family	Transcription factor SOX
+IPR022114	Family	Doublesex- and mab-3-related transcription factor  1-like
+IPR022129	Family	Transcriptional repressor NocA-like
+IPR022137	Family	Protein of unknown function DUF3669, zinc finger protein
+IPR022150	Family	Transcription factor, AT-hook-containing
+IPR023257	Family	Liver X receptor
+IPR023260	Family	Cysteine/serine-rich nuclear protein family
+IPR024178	Family	Oestrogen receptor/oestrogen-related receptor
+IPR024627	Family	V(D)J recombination-activating protein 1
+IPR025796	Family	Histone-lysine N-methyltransferase SETDB1
+IPR025799	Family	Protein arginine N-methyltransferase
+IPR025805	Family	Histone-lysine N-methyltransferase Smyd3
+IPR027253	Family	Transcriptional enhancer factor TEF-5 (TEAD3)
+IPR027255	Family	Transcriptional enhancer factor TEF-3 (TEAD4)
+IPR027276	Family	Transforming protein C-ets-2
+IPR027289	Family	Oestrogen-related receptor
+IPR028022	Family	Protein of unknown function DUF4600
+IPR028128	Family	Vasculin family
+IPR028355	Family	Estrogen receptor beta/gamma
+IPR029138	Family	snRNA-activating protein complex subunit 5
+IPR029309	Family	Calcium-responsive transcription factor
+IPR029382	Family	Lysosomal transcription factor, NCU-G1
+IPR030684	Family	Lactotransferrin
+IPR033375	Family	CGG triplet repeat-binding protein 1
+IPR008916	Homologous_superfamily	Retrovirus capsid, C-terminal
+IPR008917	Homologous_superfamily	Transcription factor, Skn-1-like, DNA-binding domain superfamily
+IPR008927	Homologous_superfamily	6-phosphogluconate dehydrogenase-like, C-terminal domain superfamily
+IPR008936	Homologous_superfamily	Rho GTPase activation protein
+IPR008967	Homologous_superfamily	p53-like transcription factor, DNA-binding
+IPR008969	Homologous_superfamily	Carboxypeptidase-like, regulatory domain superfamily
+IPR008979	Homologous_superfamily	Galactose-binding-like domain superfamily
+IPR008981	Homologous_superfamily	F-MuLV receptor-binding
+IPR008984	Homologous_superfamily	SMAD/FHA domain superfamily
+IPR009057	Homologous_superfamily	Homeobox-like domain superfamily
+IPR009060	Homologous_superfamily	UBA-like superfamily
+IPR009061	Homologous_superfamily	Putative DNA-binding domain superfamily
+IPR009072	Homologous_superfamily	Histone-fold
+IPR009110	Homologous_superfamily	Nuclear receptor coactivator, interlocking
+IPR010919	Homologous_superfamily	SAND-like domain superfamily
+IPR010982	Homologous_superfamily	Lambda repressor-like, DNA-binding domain superfamily
+IPR011011	Homologous_superfamily	Zinc finger, FYVE/PHD-type
+IPR011029	Homologous_superfamily	Death-like domain superfamily
+IPR011047	Homologous_superfamily	Quinoprotein alcohol dehydrogenase-like superfamily
+IPR011257	Homologous_superfamily	DNA glycosylase
+IPR011333	Homologous_superfamily	SKP1/BTB/POZ domain superfamily
+IPR011992	Homologous_superfamily	EF-hand domain pair
+IPR012337	Homologous_superfamily	Ribonuclease H-like superfamily
+IPR012340	Homologous_superfamily	Nucleic acid-binding, OB-fold
+IPR012674	Homologous_superfamily	Calycin
+IPR013088	Homologous_superfamily	Zinc finger, NHR/GATA-type
+IPR013761	Homologous_superfamily	Sterile alpha motif/pointed domain superfamily
+IPR014756	Homologous_superfamily	Immunoglobulin E-set
+IPR015988	Homologous_superfamily	STAT transcription factor, coiled coil
+IPR016024	Homologous_superfamily	Armadillo-type fold
+IPR016177	Homologous_superfamily	DNA-binding domain superfamily
+IPR016181	Homologous_superfamily	Acyl-CoA N-acyltransferase
+IPR016194	Homologous_superfamily	SPOC-like, C-terminal domain superfamily
+IPR016197	Homologous_superfamily	Chromo-like domain superfamily
+IPR020568	Homologous_superfamily	Ribosomal protein S5 domain 2-type fold
+IPR023219	Homologous_superfamily	Hepatocyte nuclear factor 1, N-terminal domain superfamily
+IPR025659	Homologous_superfamily	Tubby-like, C-terminal
+IPR027417	Homologous_superfamily	P-loop containing nucleoside triphosphate hydrolase
+IPR029063	Homologous_superfamily	S-adenosyl-L-methionine-dependent methyltransferase
+IPR029071	Homologous_superfamily	Ubiquitin-like domain superfamily
+IPR035500	Homologous_superfamily	Nuclear hormone receptor-like domain superfamily
+IPR000684	Repeat	RNA polymerase II, heptapeptide repeat, eukaryotic
+IPR001610	Repeat	PAC motif
+IPR001611	Repeat	Leucine-rich repeat
+IPR001680	Repeat	WD40 repeat
+IPR002110	Repeat	Ankyrin repeat
+IPR002515	Repeat	Zinc finger, C2H2C-type
+IPR004092	Repeat	Mbt repeat
+IPR004212	Repeat	GTF2I-like repeat
+IPR006553	Repeat	Leucine-rich repeat, cysteine-containing subtype
+IPR021839	Repeat	Early growth response protein 1, C-terminal
+IPR025900	Repeat	Nuclear receptor repeat
