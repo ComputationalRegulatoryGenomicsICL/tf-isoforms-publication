@@ -21,7 +21,7 @@ library(kableExtra)
 library(biomaRt)
 #library(seqinr)
 library(yaml)
-#library(data.tree)
+library(data.tree)
 #library(XLConnect)
 #library(msa)
 ```
@@ -523,54 +523,56 @@ In the scanning results, analyse Domain and Family entries which form hierarchie
 
 ```{r, include=T}
 # Find ancestral InterPro entries (may take time, therefore commented out)
-# 
-# find_ipr_ancestor = function(ipr_hierarchy, ipr_node, ipr_accessions_unique) {
-#   ancestors = Traverse(ipr_node, traversal = "ancestor")
-#   for (ancestor in ancestors) {
-#     if (ancestor$name %in% ipr_accessions_unique[ipr_accessions_unique != ipr_node$name]) {
-#       return(ancestor$name)
-#     }
-#   }
-#   return("")
-# }
-# 
-# calc_domain_status = function(ipr_hierarchy, ipr_accessions) {
-#   ipr_accessions_unique = unique(ipr_accessions)
-#   domain_statuses = data.frame(ipr = ipr_accessions_unique,
-#                                ipr_status = rep("specific", length(ipr_accessions_unique)),
-#                                ipr_ancestor = rep(NA, length(ipr_accessions_unique))) %>%
-#     mutate(ipr = as.character(ipr)) %>%
-#     mutate(ipr_status = as.character(ipr_status)) %>%
-#     mutate(ipr_ancestor = as.character(ipr_ancestor))
-#   for (ipr in ipr_accessions_unique) {
-#     ipr_node = FindNode(ipr_hierarchy, ipr)
-#     if (!is.null(ipr_node)) {
-#       ipr_ancestor_name = find_ipr_ancestor(ipr_hierarchy, ipr_node, ipr_accessions_unique)
-#       if (ipr_ancestor_name != "") {
-#         domain_statuses[domain_statuses$ipr == ipr_ancestor_name, "ipr_status"] = "general"
-#         domain_statuses[domain_statuses$ipr == ipr, "ipr_ancestor"] = ipr_ancestor_name
-#       }
-#     }
-#   }
-#   return(domain_statuses)
-# } 
-# 
 
-ipr_hierarchy_yaml = read_yaml(file = "analysis/ParentChildTreeFile_to_yaml/output/ParentChildTreeFile_with_status.yaml")
+find_ipr_ancestor = function(ipr_hierarchy, ipr_node, ipr_accessions_unique) {
+  ancestors = Traverse(ipr_node, traversal = "ancestor")
+  for (ancestor in ancestors) {
+    if (ancestor$name %in% ipr_accessions_unique[ipr_accessions_unique != ipr_node$name]) {
+      return(ancestor$name)
+    }
+  }
+  return("")
+}
+
+calc_domain_status = function(ipr_hierarchy, ipr_accessions) {
+  ipr_accessions_unique = unique(ipr_accessions)
+  domain_statuses = data.frame(ipr = ipr_accessions_unique,
+                               ipr_status = rep("specific", length(ipr_accessions_unique)),
+                               ipr_ancestor = rep(NA, length(ipr_accessions_unique))) %>%
+    mutate(ipr = as.character(ipr)) %>%
+    mutate(ipr_status = as.character(ipr_status)) %>%
+    mutate(ipr_ancestor = as.character(ipr_ancestor))
+  for (ipr in ipr_accessions_unique) {
+    ipr_node = FindNode(ipr_hierarchy, ipr)
+    if (!is.null(ipr_node)) {
+      ipr_ancestor_name = find_ipr_ancestor(ipr_hierarchy, ipr_node, ipr_accessions_unique)
+      if (ipr_ancestor_name != "") {
+        domain_statuses[domain_statuses$ipr == ipr_ancestor_name, "ipr_status"] = "general"
+        domain_statuses[domain_statuses$ipr == ipr, "ipr_ancestor"] = ipr_ancestor_name
+      }
+    }
+  }
+  return(domain_statuses)
+}
+
+# ipr_hierarchy_yaml = read_yaml(file = "analysis/ParentChildTreeFile_to_yaml/output/ParentChildTreeFile_with_status.yaml")
+ipr_hierarchy_yaml = read_yaml(file = "input_data/interpro77.0/ParentChildTreeFile_with_status.yaml")
 ipr_hierarchy = as.Node(ipr_hierarchy_yaml)
 
 # Find ancestral InterPro entries (may take time, therefore commented out)
-# 
-# ips_domains_ipr_ens99_int = ips_domains_ipr_ens99_int %>%
-#   mutate(ipr_accession = as.character(ipr_accession))
-# ips_domains_ipr_ens99_int_specific_retained = ips_domains_ipr_ens99_int %>%
-#   group_by(ensembl_transcript_id) %>%
-#   do(left_join(., calc_domain_status(ipr_hierarchy, .$ipr_accession), by = c("ipr_accession" = "ipr")))
-# write.table(ips_domains_ipr_ens99_int_specific_retained,
-#             "analysis/filter_ipr_hierarchy/ips_domains_ipr_ens99_int_specific_retained_ipr_status_ancestors_fam.tsv",
-#             quote = F,
-#             sep = "\t",
-#             row.names = F)
+
+ips_domains_ipr_ens99_int = ips_domains_ipr_ens99_int %>%
+  mutate(ipr_accession = as.character(ipr_accession))
+
+ips_domains_ipr_ens99_int_specific_retained = ips_domains_ipr_ens99_int %>%
+  group_by(ensembl_transcript_id) %>%
+  do(left_join(., calc_domain_status(ipr_hierarchy, .$ipr_accession), by = c("ipr_accession" = "ipr")))
+
+write.table(ips_domains_ipr_ens99_int_specific_retained,
+            "analysis/filter_ipr_hierarchy/ips_domains_ipr_ens99_int_specific_retained_ipr_status_ancestors_fam.tsv",
+            quote = F,
+            sep = "\t",
+            row.names = F)
 
 # Load the obtained table with ancestral entries
 ips_domains_ipr_ens99_int_specific_retained = read.delim("analysis/filter_ipr_hierarchy/ips_domains_ipr_ens99_int_specific_retained_ipr_status_ancestors_fam.tsv")
@@ -4409,6 +4411,65 @@ Overall, known TF isoforms retaining or lacking certain domains are present in t
 Let us include in the analysis only canonical DBDs: they correspond to families and comprise the vast majority of all DBD signature matches (`r (tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl %>% filter(ipr_accession %in% canonical_dbd_iprs) %>% nrow()) / (tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl %>% filter(domain_type == "DBD") %>% nrow()) * 100`%).
 
 Hence, everywhere below, unless otherwise stated, "DBD" means "canonical DBD". We also exclude the "Unknown" and "Excluded" families. 
+
+## Generate Table S3
+
+Generate Table S3 as a TSV file:
+
+```{r}
+table_s3 = read.delim("results/domains/tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl.tsv",
+                      header = T) %>%
+  filter(DBD != "Excluded") %>%
+  filter(DBD != "Unknown") %>%
+  dplyr::select(humantfs_gene_name,
+                DBD, # tf_family
+                ensembl_gene_id,
+                ensembl_transcript_id,
+                transcript_tsl,
+                transcript_tsl_code,
+                transcript_mane_select,
+                transcript_gencode_basic,
+                transcript_appris,
+                ccds,
+                protein_accession,
+                seq_md5,
+                seq_len,
+                db,
+                domain_accession,
+                domain_description,
+                start,
+                stop,
+                evalue,
+                status,
+                run_date,
+                ipr_accession, # interpro_entry
+                ipr_description, # interpro_entry_name
+                int_start, # integrated_start
+                int_stop, # integrated_stop
+                ENTRY_TYPE, # entry_type
+                ipr_status, # interpro_entry_match_status
+                ipr_ancestor, # interpro_entry_ancestor
+                domain_type,
+                represents_family) %>%
+  dplyr::rename("tf_family" = "DBD",
+                "interpro_entry" = "ipr_accession",
+                "interpro_entry_name" = "ipr_description",
+                "integrated_start" = "int_start",
+                "integrated_stop" = "int_stop",
+                # good from here
+                "entry_type" = "ENTRY_TYPE",
+                "interpro_entry_match_status" = "ipr_status",
+                "interpro_entry_ancestor" = "ipr_ancestor")
+
+write.table(table_s3,
+            "results/domains/supplementary_table_3.tsv",
+            quote = F, 
+            sep = "\t",
+            row.names = F,
+            col.names = T)
+
+```
+
 
 ## Assess DBD presence and absence in TF isoforms
 
