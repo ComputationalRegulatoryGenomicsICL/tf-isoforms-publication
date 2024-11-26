@@ -1,0 +1,1953 @@
+---
+title: "Isoform switch analysis"
+author: "Sviatoslav Sidorov"
+format: html
+editor: source
+---
+
+## Load libraries
+
+```{r}
+library(dplyr)
+library(magrittr)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+library(DESeq2)
+library(ComplexHeatmap)
+library(RColorBrewer)
+```
+
+## Define constants
+
+```{r}
+min.norm.count = 5 # Minimum DESeq2-normalised count to deem an isoform expressed in a tissue
+
+diff.cutoff = 0.2 # The minimum reciprocal difference between the expression levels of two major isoforms to call a switch between them.
+                  # This is a fraction of the expression level of the higher-expressed isoform.
+```
+
+## Dump isoform expression
+
+Zero down the TPMs that correspond to DESeq2-normalised counts that are smaller than `min.norm.count`:
+
+```{r}
+selected.table.med = readRDS("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue.rds")
+
+tfs.med.isoforms = readRDS("../../data/results/gtex8_processed/tfs_selected_table_deseq2_selected_med_expr.rds")
+
+tissue.names = names(selected.table.med)[!names(selected.table.med) %in% c("transcript_id", "gene_id")]
+
+for (tissue.name in tissue.names) {
+  for (trainscript.id in selected.table.med$transcript_id) {
+    tpm = selected.table.med[selected.table.med$transcript_id == trainscript.id, tissue.name]
+    cnt = tfs.med.isoforms[tfs.med.isoforms$transcript_id == trainscript.id, tissue.name]
+    selected.table.med[selected.table.med$transcript_id == trainscript.id, tissue.name] = ifelse(cnt >= min.norm.count, tpm, 0)
+  }
+}
+
+saveRDS(selected.table.med,
+        "../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_dumped.rds")
+```
+
+Check if any zero TPMs (retained from the original table) actually correspond to expressed isoforms (whose DESeq2-normalized count is greater than `min.norm.count`). If such cases are present, then I will need to check if they affected switches that I am calling below.
+
+```{r}
+selected.table.med = readRDS("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_dumped.rds")
+
+tfs.med.isoforms = readRDS("../../data/results/gtex8_processed/tfs_selected_table_deseq2_selected_med_expr.rds")
+
+for (tissue.name in tissue.names) {
+  for (trainscript.id in selected.table.med$transcript_id) {
+    tpm = selected.table.med[selected.table.med$transcript_id == trainscript.id, tissue.name]
+    cnt = tfs.med.isoforms[tfs.med.isoforms$transcript_id == trainscript.id, tissue.name]
+    if (tpm == 0) {
+      if (cnt > min.norm.count) {
+        cat("trainscript.id =", trainscript.id, "; tissue.name =", tissue.name, ": tmp =", tpm, ", cnt =", cnt, "\n")
+      }
+    }
+  }
+}
+```
+
+No such cases, perfect!
+
+## Calculate isoform ranks per tissue
+
+Calculate the rank of each TF isoform in each tissue. If an isoform is not expressed in a tissue, then the isoform will have the rank 10000 in that tissue:
+
+```{r, include=T}
+isoform.expression.tf.annot.bin = readRDS("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_dumped.rds")
+
+tissue.names = names(isoform.expression.tf.annot.bin)[3:(ncol(isoform.expression.tf.annot.bin))]
+
+saveRDS(tissue.names,
+        "../../data/results/gtex8_processed/tissue_names.rds")
+
+names(isoform.expression.tf.annot.bin) = c("ensembl_transcript_id",
+                                           "ensembl_gene_id",
+                                           tissue.names)
+
+saveRDS(isoform.expression.tf.annot.bin,
+        "../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_dumped_named.rds")
+
+isoform.expression.tf.annot.ranks = bind_rows(lapply(isoform.expression.tf.annot.bin %>%
+                                                       pull(ensembl_gene_id) %>%
+                                                       unique(),
+                                                     function(gene_id) {
+                                                       tf.df = isoform.expression.tf.annot.bin %>%
+                                                                 filter(ensembl_gene_id == gene_id)
+                                                       tf.rank.df = isoform.expression.tf.annot.bin %>%
+                                                                      filter(ensembl_gene_id == gene_id) %>%
+                                                                      dplyr::select(ensembl_gene_id,
+                                                                                    ensembl_transcript_id) %>%
+                                                                    bind_cols(lapply(tissue.names,
+                                                                                     function(tissue.name) {
+                                                                                       rank.df.temp = data.frame(a = rank(-tf.df[[tissue.name]],
+                                                                                                                          ties.method = "min"))
+                                                                                       return(data.frame(a = unlist(lapply(1:nrow(rank.df.temp),
+                                                                                                                           function(i) {
+                                                                                                                             ifelse(tf.df[i, tissue.name] == 0,
+                                                                                                                                    10000,
+                                                                                                                                    rank.df.temp[i, 1])
+                                                                                                                           }))))
+                                                                                     }))
+                                                       names(tf.rank.df) = c(names(tf.rank.df)[1:2], tissue.names)
+                                                       return(tf.rank.df)
+                                                     }))
+
+saveRDS(isoform.expression.tf.annot.ranks,
+        file = "../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_ranks.rds")
+```
+
+## Find major TF isoforms
+
+Find the major isoform of each TF in each tissue:
+
+```{r}
+isoform.expression.tf.annot.ranks = readRDS("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_ranks.rds")
+
+calc_if_dominant = function(isoform.df) {
+  isoform.df.tpms = isoform.df %>%
+    dplyr::select(-ensembl_gene_id,
+                  -ensembl_transcript_id)
+  return(any(isoform.df.tpms[1, ] == 1))
+}
+
+isoform.expression.tf.annot.dom.isof = isoform.expression.tf.annot.ranks %>% 
+  group_by(ensembl_transcript_id) %>%
+  do(mutate(., is_dominant = calc_if_dominant(.))) %>%
+  ungroup() %>%
+  filter(is_dominant)
+
+saveRDS(isoform.expression.tf.annot.dom.isof,
+        "../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_majors.rds")
+
+major.isoforms = isoform.expression.tf.annot.dom.isof %>%
+  pull(ensembl_transcript_id) %>%
+  unique()
+
+saveRDS(major.isoforms,
+        "../../data/results/major_isoforms.rds")
+```
+
+Hence, we found
+
+```{r}
+major.isoforms = readRDS("../../data/results/major_isoforms.rds")
+
+length(major.isoforms)
+```
+
+major isoforms produced by
+
+```{r}
+isoform.expression.tf.annot.dom.isof = readRDS("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_majors.rds")
+
+isoform.expression.tf.annot.dom.isof %>%
+  pull(ensembl_gene_id) %>%
+  unique() %>%
+  length()
+```
+
+TFs. In comparison, there are, overall,
+
+```{r}
+tfs.med.isoforms = readRDS("../../data/results/gtex8_processed/tfs_selected_table_deseq2_selected_med_expr.rds")
+
+tfs.med.isoforms %>%
+  pull(transcript_id) %>%
+  length()
+```
+
+expressed TF isoforms (they are expressed in at least one tissue) produced by
+
+```{r}
+tfs.med.isoforms %>%
+  pull(gene_id) %>%
+  unique() %>%
+  length()
+```
+
+TFs.
+
+Plot frequencies of unexpressed, expressed but not major and major isoforms:
+
+```{r}
+isoform.expr.stats.df = readRDS("../../data/results/isoform_expression_stats.rds")
+
+dbdpos.isoforms.expr = readRDS("../../data/results/dbdpos_isoforms_expr.rds")
+
+dbdneg.isoforms.expr = readRDS("../../data/results/dbdneg_isoforms_expr.rds")
+
+major.isoforms = readRDS("../../data/results/major_isoforms.rds")
+
+major.isoforms.dbdpos = major.isoforms[major.isoforms %in% dbdpos.isoforms.expr]
+
+major.isoforms.dbdneg = major.isoforms[major.isoforms %in% dbdneg.isoforms.expr]
+
+isoform.expr.stats.df %<>%
+  bind_rows(data.frame(isoform.type = "DBD+",
+                       expression.mode = "Major",
+                       isoform.num = length(major.isoforms.dbdpos))) %>%
+  bind_rows(data.frame(isoform.type = "DBD-",
+                       expression.mode = "Major",
+                       isoform.num = length(major.isoforms.dbdneg))) %>%
+  bind_rows(data.frame(isoform.type = "DBD+",
+                       expression.mode = "Expressed non-major",
+                       isoform.num = isoform.expr.stats.df[isoform.expr.stats.df$isoform.type == "DBD+" &
+                                                             isoform.expr.stats.df$expression.mode == "Expressed", 
+                                                           "isoform.num"] - length(major.isoforms.dbdpos))) %>%
+  bind_rows(data.frame(isoform.type = "DBD-",
+                       expression.mode = "Expressed non-major",
+                       isoform.num = isoform.expr.stats.df[isoform.expr.stats.df$isoform.type == "DBD-" &
+                                                             isoform.expr.stats.df$expression.mode == "Expressed", 
+                                                           "isoform.num"] - length(major.isoforms.dbdneg))) %>%
+  filter(expression.mode != "Expressed") %>%
+  group_by(isoform.type) %>%
+  mutate(isoform.freq = isoform.num / sum(isoform.num)) %>%
+  ungroup()
+
+# Plot the frequencies
+p = isoform.expr.stats.df %>% 
+    mutate(isoform.type = factor(isoform.type, levels = c("DBD-", "DBD+"))) %>%
+    mutate(expression.mode = factor(expression.mode, levels = c("Major", "Expressed non-major", "Not expressed"))) %>%
+    ggplot(aes(x = isoform.type,
+               y = isoform.freq)) +
+    geom_col(aes(fill = expression.mode)) +
+    scale_fill_manual(values = c("#6308A1", "#AE41F6", "#E6C5FC")) +
+    theme_classic()
+
+p
+
+ggsave("../../data/results/isoform_expression_analysis/tf_isoforms_nonexpressed_nonmajor_major_proportions.pdf",
+       p)
+```
+
+## Find switches of major TF isoforms
+
+Call switches:
+
+```{r, include=T}
+find_switch = function(isof.pair) {
+  isof.id1 = isof.pair[1]
+  isof.id2 = isof.pair[2]
+  
+  isof.id1.tissues = tissue.names[as.numeric(isoform.expression.tf.annot.dom.isof %>%
+                                               filter(ensembl_transcript_id == isof.id1) %>%
+                                               dplyr::select(all_of(tissue.names))) == 1]
+  
+  isof.id2.tissues = tissue.names[as.numeric(isoform.expression.tf.annot.dom.isof %>%
+                                               filter(ensembl_transcript_id == isof.id2) %>%
+                                               dplyr::select(all_of(tissue.names))) == 1]
+  
+  isof.tissues = sort(unique(c(isof.id1.tissues, isof.id2.tissues)))
+  
+  isof.df.1 = isoform.expression.tf.annot.bin %>%
+    filter(ensembl_transcript_id == isof.id1) %>%
+    dplyr::select(all_of(isof.tissues))
+  
+  isof.df.2 = isoform.expression.tf.annot.bin %>%
+    filter(ensembl_transcript_id == isof.id2) %>%
+    dplyr::select(all_of(isof.tissues))
+  
+  a = as.numeric(isof.df.1[1, ])
+  
+  b = as.numeric(isof.df.2[1, ])
+  
+  prop.a.b = a / b # division by 0 gives Inf which then gives F in the test below
+  
+  prop.b.a = b / a # division by 0 gives Inf which then gives F in the test below
+  
+  prop.a.b.test = (prop.a.b <= 1 - diff.cutoff)
+  
+  prop.b.a.test = (prop.b.a <= 1 - diff.cutoff)
+  
+  switch.exists = as.numeric((length(prop.a.b.test[prop.a.b.test]) >= 1) & 
+                             (length(prop.b.a.test[prop.b.a.test]) >= 1))
+  
+  if (switch.exists) {
+    isof2.tissues = paste(isof.tissues[prop.a.b.test], collapse = ",")
+    isof1.tissues = paste(isof.tissues[prop.b.a.test], collapse = ",")
+  } else {
+    isof2.tissues = NA
+    isof1.tissues = NA
+  }
+  
+  return(paste(c(switch.exists, isof1.tissues, isof2.tissues),
+               collapse = "|"))
+}
+
+detect_switches = function(gene_id) {
+  tf.df = isoform.expression.tf.annot.dom.isof %>%
+    filter(ensembl_gene_id == gene_id)
+  
+  if (nrow(tf.df) == 1) {
+    return(data.frame(ensembl_gene_id = gene_id,
+                      isof_id1 = (tf.df %>% pull(ensembl_transcript_id)),
+                      isof_id2 = (tf.df %>% pull(ensembl_transcript_id)),
+                      switch_detected = "0",
+                      isof1_tissues = NA,
+                      isof2_tissues = NA))
+  }
+  
+  isof.pair.df.tmp = t(combn(tf.df$ensembl_transcript_id, 2))
+  
+  isof.pair.df = data.frame(isof.pair.df.tmp[, 1],
+                            isof.pair.df.tmp[, 2])
+  
+  names(isof.pair.df) = c("isof_id1", "isof_id2")
+  
+  isof.pair.df %<>%
+    group_by(isof_id1, isof_id2) %>%
+    do(mutate(., switch = find_switch(as.character(.)))) %>%
+    ungroup() %>%
+    tidyr::separate(col = "switch",
+                    into = c("switch_detected", "isof1_tissues", "isof2_tissues"),
+                    sep = "[|]") %>%
+    mutate(ensembl_gene_id = gene_id) %>%
+    dplyr::select(ensembl_gene_id, isof_id1, isof_id2, switch_detected, isof1_tissues, isof2_tissues)
+    
+  return(isof.pair.df)
+}
+
+tissue.names = readRDS("../../data/results/gtex8_processed/tissue_names.rds")
+
+isoform.expression.tf.annot.bin = readRDS("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_dumped_named.rds")
+
+isoform.expression.tf.annot.dom.isof = readRDS("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_majors.rds")
+
+gene_ids = isoform.expression.tf.annot.dom.isof %>%
+  pull(ensembl_gene_id) %>%
+  unique()
+
+switch.table = bind_rows(lapply(gene_ids,
+                                function(gene_id) {
+                                  detect_switches(gene_id)
+                                })) %>%
+  filter(switch_detected == 1)
+
+saveRDS(switch.table,
+        paste0("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_switches_cutoff_",
+               diff.cutoff,".rds"))
+```
+
+Hence, we have
+
+```{r, include=T}
+switch.table = readRDS(paste0("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_switches_cutoff_", 
+                              diff.cutoff,".rds"))
+
+switch.table %>%
+  nrow()
+```
+
+switches produced by
+
+```{r}
+switch.table %>%
+  pull(ensembl_gene_id) %>%
+  unique() %>%
+  length()
+```
+
+TFs out of
+
+```{r}
+isoform.expression.tf.annot.ranks = readRDS("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_ranks.rds")
+
+tissue.names = names(isoform.expression.tf.annot.ranks)[!names(isoform.expression.tf.annot.ranks) %in% c("ensembl_gene_id",
+                                                                                                        "ensembl_transcript_id")]
+
+expressed.tfs.n = isoform.expression.tf.annot.ranks %>%
+  rowwise() %>%
+  mutate(isoform.expressed = any(c_across(all_of(tissue.names)) != 10000)) %>%
+  ungroup() %>%
+  filter(isoform.expressed) %>%
+  pull(ensembl_gene_id) %>%
+  unique() %>%
+  length()
+
+expressed.tfs.n
+
+rm(tissue.names)
+```
+
+expressed TFs.
+
+List major isoforms that take part in switches:
+
+```{r, include=T}
+switching.isoforms = c(switch.table %>%
+                         pull(isof_id1),
+                       switch.table %>%
+                         pull(isof_id2)) %>%
+  unique()
+
+saveRDS(switching.isoforms,
+        paste0("../../data/results/switching_major_isoforms_cutoff_", diff.cutoff,".rds"))
+```
+
+Hence, we have
+
+```{r, include=T}
+switching.isoforms = readRDS(paste0("../../data/results/switching_major_isoforms_cutoff_", diff.cutoff,".rds"))
+
+switching.isoforms %>%
+  length()
+```
+
+major isoforms that take part in at least one switch.
+
+## Annotate switching TFs and major isoforms
+
+Annotate TFs with gene names and isoforms as DBD+ or DBD-:
+
+```{r}
+tf.isoform.ndbds = read.delim("../../data/results/base_dbd_expression_analysis_table.tsv")
+
+switch.table = readRDS(paste0("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_switches_cutoff_", 
+                              diff.cutoff,".rds"))
+
+switch.table.annot = switch.table %>%
+  left_join(tf.isoform.ndbds %>%
+              dplyr::select(-ensembl_transcript_id,
+                            -n_dbd) %>%
+              distinct(),
+            by = c("ensembl_gene_id" = "ensembl_gene_id")) %>%
+  left_join(tf.isoform.ndbds %>%
+              dplyr::select(ensembl_transcript_id,
+                            n_dbd),
+            by = c("isof_id1" = "ensembl_transcript_id")) %>%
+  dplyr::rename("n_dbd_id1" = "n_dbd") %>%
+  left_join(tf.isoform.ndbds %>%
+              dplyr::select(ensembl_transcript_id,
+                            n_dbd),
+            by = c("isof_id2" = "ensembl_transcript_id")) %>%
+  dplyr::rename("n_dbd_id2" = "n_dbd") %>%
+  group_by(ensembl_gene_id) %>%
+  do(mutate(., switch.n = nrow(.))) %>%
+  ungroup()
+
+saveRDS(switch.table.annot,
+        paste0("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_switches_annot_cutoff_", diff.cutoff,".rds"))
+```
+
+Hence, we have
+
+```{r}
+switch.table.annot = readRDS(paste0("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_switches_annot_cutoff_", diff.cutoff,".rds"))
+
+pospos.n = switch.table.annot %>%
+  filter(n_dbd_id1 > 0 & n_dbd_id2 > 0) %>%
+  nrow()
+
+posneg.n = switch.table.annot %>%
+  filter(n_dbd_id1 > 0 & n_dbd_id2 == 0 | n_dbd_id1 == 0 & n_dbd_id2 > 0) %>%
+  nrow()
+
+negneg.n = switch.table.annot %>%
+  filter(n_dbd_id1 == 0 & n_dbd_id2 == 0) %>%
+  nrow()
+
+all.n = switch.table.annot %>%
+  nrow()
+  
+cat("The number of +/+ switches:", pospos.n, "(", pospos.n / all.n * 100, "% out of", all.n, ")\n")
+
+cat("The number of +/- switches:", posneg.n, "(", posneg.n / all.n * 100, "% out of", all.n, ")\n")
+
+cat("The number of -/- switches:", negneg.n, "(", negneg.n / all.n * 100, "% out of", all.n, ")\n")
+
+p = data.frame(switch.type = c("+/+", "+/-", "-/-"),
+               switch.proportion = c(pospos.n / all.n,
+                                     posneg.n / all.n,
+                                     negneg.n / all.n),
+               category = "switch") %>%
+  mutate(switch.type = factor(switch.type, levels = rev(switch.type))) %>%
+  ggplot(aes(x = category,
+             y = switch.proportion,
+             fill = switch.type)) +
+    geom_col() +
+    theme_classic()
+
+p
+
+ggsave(paste0("../../data/results/switch_proportions_by_type_cutoff_", diff.cutoff,".pdf"),
+       p)
+```
+
+Find the proportions of expressed TFs that produce 0, 1, 2, 3 or \>=4 switches:
+
+```{r}
+switching.tfs.n = switch.table.annot %>%
+  pull(ensembl_gene_id) %>%
+  unique() %>%
+  length()
+
+nonswitching.tfs.proportion = (expressed.tfs.n - switching.tfs.n) / expressed.tfs.n
+
+switches.1.tfs.n = switch.table.annot %>%
+  filter(switch.n == 1) %>%
+  pull(ensembl_gene_id) %>%
+  unique() %>%
+  length()
+
+switches.1.tfs.proportion = switches.1.tfs.n / expressed.tfs.n
+
+switches.2.tfs.n = switch.table.annot %>%
+  filter(switch.n == 2) %>%
+  pull(ensembl_gene_id) %>%
+  unique() %>%
+  length()
+
+switches.2.tfs.proportion = switches.2.tfs.n / expressed.tfs.n
+
+switches.3.tfs.n = switch.table.annot %>%
+  filter(switch.n == 3) %>%
+  pull(ensembl_gene_id) %>%
+  unique() %>%
+  length()
+
+switches.3.tfs.proportion = switches.3.tfs.n / expressed.tfs.n
+
+switches.gte4.tfs.n = switch.table.annot %>%
+  filter(switch.n >= 4) %>%
+  pull(ensembl_gene_id) %>%
+  unique() %>%
+  length()
+
+switches.gte4.tfs.proportion = switches.gte4.tfs.n / expressed.tfs.n
+
+cat("Proportion of TFs producing 0 switches:", nonswitching.tfs.proportion, "\n")
+
+cat("Proportion of TFs producing 1 switches:", switches.1.tfs.proportion, "\n")
+
+cat("Proportion of TFs producing 2 switches:", switches.2.tfs.proportion, "\n")
+
+cat("Proportion of TFs producing 3 switches:", switches.3.tfs.proportion, "\n")
+
+cat("Proportion of TFs producing >=4 switches:", switches.gte4.tfs.proportion, "\n")
+
+p = data.frame(switch.n = c("0", "1", "2", "3", ">=4"),
+               tf.proportion = c(nonswitching.tfs.proportion,
+                                 switches.1.tfs.proportion,
+                                 switches.2.tfs.proportion,
+                                 switches.3.tfs.proportion,
+                                 switches.gte4.tfs.proportion),
+               category = "TFs") %>%
+  mutate(switch.n = factor(switch.n, levels = rev(switch.n))) %>%
+  ggplot(aes(x = category,
+             y = tf.proportion,
+             fill = switch.n)) +
+    geom_col() +
+    theme_classic()
+
+p
+
+ggsave(paste0("../../data/results/tf_proportions_by_number_of_switches_cutoff_", diff.cutoff, ".pdf"),
+       p)
+```
+
+## Summarise switches in heatmaps
+
+Next, summarise switches via categorising each TF in each tissue according to the major isoform of the TF in the tissue. As before, for a switch $(A, B)$ of two major isoforms $A$ and $B$, let $T_A$ be the set of tissues where the switch occurs and $A$ dominates $B$. Likewise, let $T_B$ be the set of tissues where the switch occurs and $B$ dominates $A$. Let $N_A = |T_A|$, $N_B = |T_B|$, and $N_A\geq N_B$. Assign the category "a" ("b") to the TF in the tissues from $T_A$ if $A$ is DBD+ (DBD-). Likewise, assign the category "c" ("d") to the TF in the tissues from $T_B$ if $B$ is DBD+ (DBD-). For instance, if $A$ is DBD+, then the TF will be assigned the category "a" in the tissues from $T_A$, and if $B$ is DBD-, then the TF will be assigned the category "d" in the tissues from $T_B$. In all other tissues, apart from those from $T_A$ and $T_B$, assign to the TF the category "e". Therefore, the category "e" characterises the TF in all tissues where it is not expressed or where it is expressed but does not switch it major isoforms.
+
+```{r}
+generate_category_table_row = function(i) {
+  switch_df = data.frame(matrix(nrow = 1, ncol = length(tissue.names) + 1))
+  names(switch_df) = c("switch_id", tissue.names)
+  tf_id = switch.table.annot[i, "ensembl_gene_id"]
+  isof_id1 = switch.table.annot[i, "isof_id1"]
+  isof_id2 = switch.table.annot[i, "isof_id2"]
+  tf_name = switch.table.annot[i, "humantfs_gene_name"]
+  switch_id = paste(tf_id, tf_name, isof_id1, isof_id2, sep = "_")
+  switch_df[1, "switch_id"] = switch_id
+  isof1_dominance_tissues = unlist(stringr::str_split(switch.table.annot[i, "isof1_tissues"],
+                                                      fixed(",")))
+  isof2_dominance_tissues = unlist(stringr::str_split(switch.table.annot[i, "isof2_tissues"],
+                                                      fixed(",")))
+  isof1_dominance_tissues.n = length(isof1_dominance_tissues)
+  isof2_dominance_tissues.n = length(isof2_dominance_tissues)
+  isof1_ndbd = switch.table.annot[i, "n_dbd_id1"]
+  isof2_ndbd = switch.table.annot[i, "n_dbd_id2"]
+  if (isof1_dominance_tissues.n >= isof2_dominance_tissues.n) {
+    set1_category = ifelse(isof1_ndbd > 0, "a", "b")
+    set2_category = ifelse(isof2_ndbd > 0, "c", "d")
+  } else {
+    set2_category = ifelse(isof2_ndbd > 0, "a", "b")
+    set1_category = ifelse(isof1_ndbd > 0, "c", "d")
+  }
+  switch_df[1, names(switch_df) %in% isof1_dominance_tissues] = set1_category
+  switch_df[1, names(switch_df) %in% isof2_dominance_tissues] = set2_category
+  switch_df[1, !names(switch_df) %in% c(isof1_dominance_tissues, isof2_dominance_tissues, "switch_id")] = "e"
+  return(switch_df)
+}
+
+switch.table.annot = readRDS(paste0("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_switches_annot_cutoff_", 
+                                    diff.cutoff, ".rds"))
+
+tissue.names = readRDS("../../data/results/gtex8_processed/tissue_names.rds")
+
+dominant.isoform.number.matrix = bind_rows(lapply(1:nrow(switch.table.annot),
+                                                  function(i) {
+                                                    generate_category_table_row(i)
+                                                  }))
+
+saveRDS(dominant.isoform.number.matrix,
+        paste0("../../data/results/dominant_isoform_number_matrix_switches_cutoff_", diff.cutoff, ".rds"))
+```
+
+Different TF categories:
+
+```{r, include=T}
+sort(unique(unlist(dominant.isoform.number.matrix[, c(2:44)])))
+```
+
+Correct.
+
+Cluster the matrix of isoform ranks by the Hamming distance and visualise it:
+
+```{r, include=T}
+hamming_dist = function(x, y) {
+  match.vector = (x != y)
+  return(length(match.vector[match.vector]))
+}
+
+dominant.isoform.number.matrix = readRDS(paste0("../../data/results/dominant_isoform_number_matrix_switches_cutoff_", diff.cutoff, ".rds"))
+
+heatmap.df = dominant.isoform.number.matrix %>%
+  tibble::column_to_rownames(var = "switch_id")
+
+cluster.colors = structure(c("dark red", "dark blue",
+                             "red", "blue",
+                             "grey"), 
+                             names = c("a", "b", 
+                                       "c", "d",
+                                       "e"))
+
+h.complete = Heatmap(heatmap.df, 
+                     name = "Isoform ranks", 
+                     clustering_distance_columns = function(x, y) hamming_dist(x, y),
+                     clustering_distance_rows = function(x, y) hamming_dist(x, y),
+                     clustering_method_rows = "complete", 
+                     clustering_method_columns = "complete",             
+                     col = cluster.colors,
+                     row_labels = rep("", nrow(heatmap.df)),
+                     row_split = 9, 
+                     column_split = 4) 
+
+h.wardd2 = Heatmap(heatmap.df, 
+                   name = "Isoform ranks", 
+                   clustering_distance_columns = function(x, y) hamming_dist(x, y),
+                   clustering_distance_rows = function(x, y) hamming_dist(x, y),
+                   clustering_method_rows = "ward.D2", 
+                   clustering_method_columns = "ward.D2",             
+                   col = cluster.colors,
+                   row_labels = rep("", nrow(heatmap.df)),
+                   row_split = 10,
+                   column_split = 3) # 4
+
+pdf(file = paste0("../../data/results/clustered_switch_heatmap_tfs9_tissues4_switches_method-complete_cutoff_", diff.cutoff, ".pdf"),
+    width = 10,
+    height = 15)
+h.complete
+dev.off()
+
+pdf(file = paste0("../../data/results/clustered_switch_heatmap_tfs10_tissues3_switches_method-wardD2_cutoff_", diff.cutoff, ".pdf"), # 4
+    width = 10,
+    height = 15)
+h.wardd2
+dev.off()
+```
+
+The heatmap with the complete linkage gives more meaningful clusters of DBD+/DBD- switches, while the heatmap with Ward's D2 linkage gives clearer clusters of DBD+/DBD+ switches. Specifically, in the complete linkage heatmap, cluster 1 represents switches in which a DBD- isoform expressed mostly in the brain is switched to a DBD+ isoform in specific non-brain tissues. Cluster 2 contains switches of DBD+ and DBD- major isoforms depleted from the brain. Cluster 3 groups switches of broadly expressed DBD- major isoforms to DBD+ major isoforms expressed predominantly in particular brain tissues. Cluster 5 represents switches of major DBD+ isoforms expressed broadly outside the brain for DBD- isoforms expressed in the majority of the brain tissues. Other clusters in this heatmap contain mostly DBD+/DBD+ switches, and of these clusters only cluster 4 is clear. It contains switches of a broadly expressed non-brain major DBD+ isoform to a brain-specific major DBD+ isoform. But such switches are also present in cluster 7.
+
+In contrast, the heatmap with Ward's D2 linkage for an unclear reason better represents clusters of DBD+/DBD+ switches. Indeed, cluster 2 represents switches where a broadly expressed DBD+ major isoform is exchanged for another major DBD+ isoform outside the brain. Cluster 3 groups switches of the same type as cluster 4 in the complete linkage heatmap (a broadly expressed non-brain major DBD+ isoform switches to a brain-specific major DBD+ isoform) but visually has all such switches. Cluster 5 contains switches of a major DBD+ isoform that is expressed broadly and mostly outside the brain to a more brain-specific major DBD+ isoform and, very occasionally, to a DBD- major isoform specific to particular brain tissues. Cluster 8 includes switches of a broadly expressed major DBD+ isoform to a mostly non-brain major DBD+ isoform. Finally, cluster 10 represents switches of a broadly expressed mostly non-brain major DBD+ isoform to another major DBD+ isoform expressed in particular brain and non-brain tissues. When analysing clusters 8 and 10, an additional selection of more the clearest switches may be necessary. On the other hand, DBD+/DBD- switches are clustered less clear in this heatmap than in the complete linkage heatmap. Although cluster 4 in the heatmap with Ward's D2 linkage represents cluster 5 in the complete linkage heatmap, the other clusters showing mostly DBD+/DBD- switches in the Ward's D2 linkage heatmap (namely, clusters 6 and 7) are visually less clear than the DBD+/DBD- clusters from the complete-linkage heatmap.
+
+Therefore, I will use the aforementioned DBD+/DBD- clusters from the complete linkage heatmap and DBD+/DBD+ clusters from the Ward's D2 linkage heatmap.
+
+Regarding tissue clusters, in the complete linkage heatmap the testis stands separately, as in all my previous heatmaps, which should be explained by its unique transcriptional profile. Next, all the brain tissues together make up a separate cluster, which makes sense, and, interestingly, muscle tissues also comprise a separate cluster. They cluster separately probably because they are a special type of tissue, and because muscle samples must be much less mixed (contain mostly muscle cells) than other samples.
+
+Annotate all switches with their corresponding TFs and clusters. Start with the complete linkage:
+
+```{r}
+h.complete = draw(h.complete)
+
+cluster.list = row_order(h.complete)
+
+cluster.annot.df = bind_rows(lapply(1:(length(cluster.list)),
+                                   function(i) {
+                                     cluster.df = data.frame(switch_id = dominant.isoform.number.matrix[cluster.list[[i]], "switch_id"],
+                                                             cluster_number = i)
+                                     return(cluster.df)
+                                   })) %>%
+  rowwise() %>%
+  mutate(ensembl_gene_id = unlist(stringr::str_split(switch_id, fixed("_")))[1]) %>%
+  mutate(humantfs_gene_name = unlist(stringr::str_split(switch_id, fixed("_")))[2]) %>%
+  ungroup()
+
+write.table(cluster.annot.df,
+            file = "../../data/results/gene_cluster_annotation_method-complete.tsv",
+            quote = F,
+            row.names = F,
+            sep = "\t")
+```
+
+Summarise the complete linkage clusters:
+
+```{r}
+cluster.annot.df = read.delim("../../data/results/gene_cluster_annotation_method-complete.tsv")
+
+cluster.summary.df = cluster.annot.df %>%
+  add_count(cluster_number,
+            name = "switch_number") %>%
+  group_by(cluster_number) %>%
+  mutate(tf_number = length(unique(humantfs_gene_name))) %>%
+  mutate(tf_list = paste(sort(unique(humantfs_gene_name)), collapse = ", ")) %>%
+  ungroup() %>%
+  dplyr::select(cluster_number,
+                switch_number,
+                tf_number,
+                tf_list) %>%
+  distinct()
+
+write.table(cluster.summary.df,
+            file = "../../data/results/gene_cluster_summary_method-complete.tsv",
+            quote = F,
+            row.names = F,
+            sep = "\t")
+```
+
+Annotate TFs with their clusters in the heatmap clustered with the Ward D2 linkage:
+
+```{r}
+h.wardd2 = draw(h.wardd2)
+
+cluster.list = row_order(h.wardd2)
+
+cluster.annot.df = bind_rows(lapply(1:(length(cluster.list)),
+                                   function(i) {
+                                     cluster.df = data.frame(switch_id = dominant.isoform.number.matrix[cluster.list[[i]], "switch_id"],
+                                                             cluster_number = i)
+                                     return(cluster.df)
+                                   })) %>%
+  rowwise() %>%
+  mutate(ensembl_gene_id = unlist(stringr::str_split(switch_id, fixed("_")))[1]) %>%
+  mutate(humantfs_gene_name = unlist(stringr::str_split(switch_id, fixed("_")))[2]) %>%
+  ungroup()
+
+
+write.table(cluster.annot.df,
+            file = "../../data/results/gene_cluster_annotation_method-wardd2.tsv",
+            quote = F,
+            row.names = F,
+            sep = "\t")
+```
+
+Summarise the Ward's D2 linkage switch clusters:
+
+```{r}
+cluster.annot.df = read.delim("../../data/results/gene_cluster_annotation_method-wardd2.tsv")
+
+cluster.summary.df = cluster.annot.df %>%
+  add_count(cluster_number,
+            name = "switch_number") %>%
+  group_by(cluster_number) %>%
+  mutate(tf_number = length(unique(humantfs_gene_name))) %>%
+  mutate(tf_list = paste(sort(unique(humantfs_gene_name)), collapse = ", ")) %>%
+  ungroup() %>%
+  dplyr::select(cluster_number,
+                switch_number,
+                tf_number,
+                tf_list) %>%
+  distinct()
+
+write.table(cluster.summary.df,
+            file = "../../data/results/gene_cluster_summary_method-wardd2.tsv",
+            quote = F,
+            row.names = F,
+            sep = "\t")
+```
+
+## Find enrichments in switching TFs
+
+Prepare the data to test gene set overrepresentations in switching TFs (signature), in comparison to all TFs that express more than one major isoform (background):
+
+```{r}
+library(hypeR)
+
+switch.table.annot = readRDS(paste0("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_switches_annot_cutoff_", diff.cutoff,".rds"))
+
+switching.tfs = switch.table.annot %>%
+  pull(humantfs_gene_name) %>%
+  unique()
+
+isoform.expression.tf.annot.ranks = readRDS("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_ranks.rds")
+
+tissue.names = names(isoform.expression.tf.annot.ranks)[!names(isoform.expression.tf.annot.ranks) %in% c("ensembl_gene_id",
+                                                                                                         "ensembl_transcript_id")]
+
+tf.isoform.ndbds = read.delim("../../data/results/base_dbd_expression_analysis_table.tsv")
+
+isoform.expression.tf.annot.dom.isof = readRDS("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_majors.rds")
+
+# TFs that express more than one major isoform
+mi.expressed.tfs = isoform.expression.tf.annot.dom.isof %>%
+  group_by(ensembl_gene_id) %>%
+  do(mutate(., major.isof.n = nrow(.))) %>%
+  ungroup() %>%
+  filter(major.isof.n > 1) %>%
+  left_join(tf.isoform.ndbds %>%
+              dplyr::select(-ensembl_transcript_id,
+                            -n_dbd) %>%
+              distinct(),
+            by = c("ensembl_gene_id" = "ensembl_gene_id")) %>%
+  pull(humantfs_gene_name) %>%
+  unique()
+
+cat("\n\n")
+
+cat("Number of switching TFs (signature):", length(switching.tfs), "\n")
+
+cat("Number of TFs that express more than one major isoform (background):", length(mi.expressed.tfs), "\n")
+
+saveRDS(switching.tfs,
+        "../../data/results/switching_tfs.rds")
+
+saveRDS(mi.expressed.tfs,
+        "../../data/results/multiisoform_expressed_tfs.rds")
+
+cluster.annot.df.complete = read.delim("../../data/results/gene_cluster_annotation_method-complete.tsv",
+                                       header = T,
+                                       sep = "\t")
+
+cluster.annot.df.wardd2 = read.delim("../../data/results/gene_cluster_annotation_method-wardd2.tsv",
+                                     header = T,
+                                     sep = "\t")
+
+overr.fdr = 0.1
+
+complete.linkage.clusters = c(1, 2, 3, 5)
+
+wardd2.linkage.clusters = c(2, 3, 5, 8)
+
+go.bp.sets = msigdb_gsets(species = "Homo sapiens", category = "C5", subcategory = "GO:BP")
+
+go.mf.sets = msigdb_gsets(species = "Homo sapiens", category = "C5", subcategory = "GO:MF")
+
+go.cc.sets = msigdb_gsets(species = "Homo sapiens", category = "C5", subcategory = "GO:CC")
+
+h.sets = msigdb_gsets(species = "Homo sapiens", category = "H")
+
+c2.cp.sets = msigdb_gsets(species = "Homo sapiens", category = "C2", subcategory = "CP")
+```
+
+Prepare functions to test overrepresentations:
+
+```{r}
+get_cluster_tfs = function(cluster.annotation.df,
+                           cluster.number) {
+  cluster.tfs = cluster.annotation.df %>%
+    filter(cluster_number == cluster.number) %>%
+    pull(humantfs_gene_name) %>%
+    unique()
+    
+  return(cluster.tfs)
+}
+
+calc_overr = function(signatures,
+                      geneset.collections,
+                      background.set) {
+  
+  hyp_obj_list = as.list(unlist(lapply(signatures,
+                                       function(s) {
+                                         return(lapply(geneset.collections,
+                                                       function(c) {
+                                                         overr.obj = hypeR(signature = s,
+                                                                           genesets = c,
+                                                                           test = "hypergeometric",
+                                                                           background = background.set,
+                                                                           pval = 1, # No filtering by raw p-value
+                                                                           fdr = 1,  # No filtering by FDR, to adjust all p-values later
+                                                                           quiet = FALSE)
+                                                         return(overr.obj)
+                                                       }))
+                                         })))
+  
+  return(hyp_obj_list)
+}
+
+select_significant_overr = function(hyp_obj_list, 
+                                    signature.names, # The order of the names must match the order of signatures in the list signatures
+                                    collection.names,# The order of the names must match the order of collections in the list geneset.collections
+                                    fdr) {
+  
+  raw.pvalues.df = data.frame(signature.name = character(),
+                              collection.name = character(),
+                              geneset.name = character(),
+                              raw.pvalue = numeric())
+  
+  signature.collection.pairs = expand.grid(signature.names, collection.names)
+  
+  names(signature.collection.pairs) = c("signature", "collection")
+
+  for (i in seq(1, length(hyp_obj_list))) {
+    signature.name = signature.collection.pairs[i, "signature"]
+    
+    collection.name = signature.collection.pairs[i, "collection"]
+    
+    raw.pvalues.df %<>%
+      bind_rows(data.frame(signature.name = signature.name,
+                           collection.name = collection.name,
+                           geneset.name = hyp_obj_list[[i]]$data$label,
+                           raw.pvalue = hyp_obj_list[[i]]$data$pval))
+  }
+
+  return(raw.pvalues.df %<>%
+           mutate(padj = p.adjust(raw.pvalue, method = "BH")) %>%
+           filter(padj < fdr))
+}
+```
+
+Use a hypergeometric test to find if any GO Biological Process, Molecular Function or Cellular Component terms, as well as any hallmark or canonical pathways are overrepresented among switching TFs (a signature), in comparison to all multi-isoform expressed TFs (the background):
+
+```{r}
+test.signatures = list(switching.tfs)
+
+signature.names = c("Switching_TFs")
+
+test.collections = list(go.bp.sets,
+                        go.mf.sets,
+                        go.cc.sets,
+                        h.sets,
+                        c2.cp.sets)
+
+collection.names = c("go.bp", 
+                     "go.mf", 
+                     "go.cc", 
+                     "hallmark", 
+                     "canonical")
+
+test.background = mi.expressed.tfs
+
+overr.list = calc_overr(test.signatures,
+                        test.collections,
+                        test.background)
+
+overr.df = select_significant_overr(overr.list,
+                                    signature.names,
+                                    collection.names,
+                                    fdr = 0.1)
+
+overr.df
+```
+
+No overrepresentations. Of note, here and below "Percentage of signature found across genesets" in the output of hypeR is calculated wrongly: "1%" actually means (100%), and a fraction of a percent (for example, "0.73%") means the percentage out of 100 (i. e., "73%"). See https://github.com/montilab/hypeR/issues/40 for details.
+
+Test only GO Biological Process terms for the set of switching TFs as a signature:
+
+```{r}
+test.signatures = list(switching.tfs)
+
+signature.names = c("Switching_TFs")
+
+test.collections = list(go.bp.sets)
+
+collection.names = c("go.bp")
+
+test.background = mi.expressed.tfs
+
+overr.list = calc_overr(test.signatures,
+                        test.collections,
+                        test.background)
+
+overr.df = select_significant_overr(overr.list,
+                                    signature.names,
+                                    collection.names,
+                                    fdr = 0.1)
+
+overr.df
+```
+
+No overrepresentation.
+
+Use a hypergeometric test to find if any GO Biological Process, Molecular Function or Cellular Component terms, as well as any hallmark or canonical pathways are overrepresented among switching TFs from the interesting complete linkage clusters (signatures), in comparison to all switching TFs (the background):
+
+```{r}
+test.signatures = lapply(complete.linkage.clusters,
+                         function(cluster.number) {
+                           get_cluster_tfs(cluster.annot.df.complete,
+                                           cluster.number)
+                         })
+
+signature.names = paste0("cluster", complete.linkage.clusters)
+
+test.collections = list(go.bp.sets,
+                        go.mf.sets,
+                        go.cc.sets,
+                        h.sets,
+                        c2.cp.sets)
+
+collection.names = c("go.bp", 
+                     "go.mf", 
+                     "go.cc", 
+                     "hallmark", 
+                     "canonical")
+
+test.background = switching.tfs
+
+overr.list = calc_overr(test.signatures,
+                        test.collections,
+                        test.background)
+
+overr.df = select_significant_overr(overr.list,
+                                    signature.names,
+                                    collection.names,
+                                    fdr = 0.1)
+
+overr.df
+```
+
+No overrepresentations.
+
+Test only the most interesting cluster 5 against all the gene set collections:
+
+```{r}
+test.signatures = list(get_cluster_tfs(cluster.annot.df.complete, 5))
+
+signature.names = "cluster5"
+
+test.collections = list(go.bp.sets,
+                        go.mf.sets,
+                        go.cc.sets,
+                        h.sets,
+                        c2.cp.sets)
+
+collection.names = c("go.bp", 
+                     "go.mf", 
+                     "go.cc", 
+                     "hallmark", 
+                     "canonical")
+
+test.background = switching.tfs
+
+overr.list = calc_overr(test.signatures,
+                        test.collections,
+                        test.background)
+
+overr.df = select_significant_overr(overr.list,
+                                    signature.names,
+                                    collection.names,
+                                    fdr = 0.1)
+
+overr.df
+```
+
+No overrepresentations.
+
+Test cluster 5 only against GO Biological Process terms:
+
+```{r}
+test.signatures = list(get_cluster_tfs(cluster.annot.df.complete, 5))
+
+signature.names = "cluster5"
+
+test.collections = list(go.bp.sets)
+
+collection.names = c("go.bp")
+
+test.background = switching.tfs
+
+overr.list = calc_overr(test.signatures,
+                        test.collections,
+                        test.background)
+
+overr.df = select_significant_overr(overr.list,
+                                    signature.names,
+                                    collection.names,
+                                    fdr = 0.1)
+
+overr.df
+```
+
+No overrepresentations.
+
+Next, test the interesting TF clusters from the Ward's D2 linkage heatmap:
+
+```{r}
+test.signatures = lapply(wardd2.linkage.clusters,
+                         function(cluster.number) {
+                           get_cluster_tfs(cluster.annot.df.wardd2,
+                                           cluster.number)
+                         })
+
+signature.names = paste0("cluster", wardd2.linkage.clusters)
+
+test.collections = list(go.bp.sets,
+                        go.mf.sets,
+                        go.cc.sets,
+                        h.sets,
+                        c2.cp.sets)
+
+collection.names = c("go.bp", 
+                     "go.mf", 
+                     "go.cc", 
+                     "hallmark", 
+                     "canonical")
+
+test.background = switching.tfs
+
+overr.list = calc_overr(test.signatures,
+                        test.collections,
+                        test.background)
+
+overr.df = select_significant_overr(overr.list,
+                                    signature.names,
+                                    collection.names,
+                                    fdr = 0.1)
+
+overr.df
+```
+
+No overrepresentation.
+
+Test only the most interesting cluster 3 against all the gene set collections:
+
+```{r}
+test.signatures = list(get_cluster_tfs(cluster.annot.df.wardd2, 3))
+
+signature.names = "cluster3"
+
+test.collections = list(go.bp.sets,
+                        go.mf.sets,
+                        go.cc.sets,
+                        h.sets,
+                        c2.cp.sets)
+
+collection.names = c("go.bp", 
+                     "go.mf", 
+                     "go.cc", 
+                     "hallmark", 
+                     "canonical")
+
+test.background = switching.tfs
+
+overr.list = calc_overr(test.signatures,
+                        test.collections,
+                        test.background)
+
+overr.df = select_significant_overr(overr.list,
+                                    signature.names,
+                                    collection.names,
+                                    fdr = 0.1)
+
+overr.df
+```
+
+No overrepresentations.
+
+Test cluster 3 only against GO Biological Process terms:
+
+```{r}
+test.signatures = list(get_cluster_tfs(cluster.annot.df.wardd2, 3))
+
+signature.names = "cluster3"
+
+test.collections = list(go.bp.sets)
+
+collection.names = c("go.bp")
+
+test.background = switching.tfs
+
+overr.list = calc_overr(test.signatures,
+                        test.collections,
+                        test.background)
+
+overr.df = select_significant_overr(overr.list,
+                                    signature.names,
+                                    collection.names,
+                                    fdr = 0.1)
+
+overr.df
+```
+
+No overrepresentations.
+
+Overall, no overrepresentations in the interesting clusters.
+
+Finally, test TF family overrepresentations.
+
+Generate the collection of TF family gene sets:
+
+```{r}
+all.tf.families = tf.isoform.ndbds %>%
+  pull(tf_family) %>%
+  sort() %>%
+  unique()
+
+all.tf.fam.collection = lapply(all.tf.families,
+                               function(f) {
+                                 return(tf.isoform.ndbds %>%
+                                          filter(tf_family == f) %>%
+                                          pull(humantfs_gene_name) %>%
+                                          unique())
+                               })
+
+names(all.tf.fam.collection) = all.tf.families
+```
+
+Test the overrepresentation of TF families:
+
+1)  In switching TFs:
+
+```{r}
+test.signatures = list(switching.tfs)
+
+signature.names = c("Switching_TFs")
+
+test.collections = list(all.tf.fam.collection)
+
+collection.names = c("All_TF_families")
+
+test.background = mi.expressed.tfs
+
+overr.list = calc_overr(test.signatures,
+                        test.collections,
+                        test.background)
+
+overr.df = select_significant_overr(overr.list,
+                                    signature.names,
+                                    collection.names,
+                                    fdr = 0.1)
+
+overr.df
+```
+
+2)  In the interesting complete linkage clusters:
+
+```{r}
+test.signatures = lapply(complete.linkage.clusters,
+                         function(cluster.number) {
+                           get_cluster_tfs(cluster.annot.df.complete,
+                                           cluster.number)
+                         })
+
+signature.names = paste0("cluster", complete.linkage.clusters)
+
+test.collections = list(all.tf.fam.collection)
+
+collection.names = c("All_TF_families")
+
+test.background = switching.tfs
+
+overr.list = calc_overr(test.signatures,
+                        test.collections,
+                        test.background)
+
+overr.df = select_significant_overr(overr.list,
+                                    signature.names,
+                                    collection.names,
+                                    fdr = 0.1)
+
+overr.df
+```
+
+No overrepresentations.
+
+Test only cluster 5:
+
+```{r}
+test.signatures = list(get_cluster_tfs(cluster.annot.df.complete, 5))
+
+signature.names = "cluster5"
+
+test.collections = list(all.tf.fam.collection)
+
+collection.names = c("All_TF_families")
+
+test.background = switching.tfs
+
+overr.list = calc_overr(test.signatures,
+                        test.collections,
+                        test.background)
+
+overr.df = select_significant_overr(overr.list,
+                                    signature.names,
+                                    collection.names,
+                                    fdr = 0.1)
+
+overr.df
+```
+
+No overrepresentations.
+
+3)  In interesting Ward's D2 linkage clusters:
+
+```{r}
+test.signatures = lapply(wardd2.linkage.clusters,
+                         function(cluster.number) {
+                           get_cluster_tfs(cluster.annot.df.wardd2,
+                                           cluster.number)
+                         })
+
+signature.names = paste0("cluster", wardd2.linkage.clusters)
+
+test.collections = list(all.tf.fam.collection)
+
+collection.names = c("All_TF_families")
+
+test.background = switching.tfs
+
+overr.list = calc_overr(test.signatures,
+                        test.collections,
+                        test.background)
+
+overr.df = select_significant_overr(overr.list,
+                                    signature.names,
+                                    collection.names,
+                                    fdr = 0.1)
+
+overr.df
+```
+
+No overrepresentations.
+
+Test only cluster 3:
+
+```{r}
+test.signatures = list(get_cluster_tfs(cluster.annot.df.wardd2, 3))
+
+signature.names = "cluster3"
+
+test.collections = list(all.tf.fam.collection)
+
+collection.names = c("All_TF_families")
+
+test.background = switching.tfs
+
+overr.list = calc_overr(test.signatures,
+                        test.collections,
+                        test.background)
+
+overr.df = select_significant_overr(overr.list,
+                                    signature.names,
+                                    collection.names,
+                                    fdr = 0.1)
+
+overr.df
+```
+
+No overrepresentations.
+
+In total, the lack of overrepresentations of GO terms, pathways and TF families among switching TFs and their particular clusters suggests that major isoform switches and their cross-tissue expression patterns are universal phenomenon. However, the overrepresentations may also be affected by the value of the cutoff for the major isoform expression levels in the switch definition that I used.
+
+Test overrepresentations of the same gene sets and TF families amond the following sets of TFs:
+
+1)  TFs producing a single DBD+/DBD+ switch.
+
+2)  TFs producing a single DBD+/DBD- switch.
+
+3)  TFs producing a single DBD-/DBD- switch.
+
+4)  TFs producing multiple switches.
+
+Generate these signatures:
+
+```{r}
+switch.table.annot = readRDS(paste0("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_switches_annot_cutoff_", diff.cutoff,".rds"))
+
+pospos.single.switch.tfs = switch.table.annot %>%
+  filter(switch.n == 1) %>%
+  filter(n_dbd_id1 > 0 & n_dbd_id2 > 0) %>%
+  pull(humantfs_gene_name) %>%
+  unique()
+
+posneg.single.switch.tfs = switch.table.annot %>%
+  filter(switch.n == 1) %>%
+  filter(n_dbd_id1 > 0 & n_dbd_id2 == 0 | n_dbd_id1 == 0 & n_dbd_id2 > 0) %>%
+  pull(humantfs_gene_name) %>%
+  unique()
+
+negneg.single.switch.tfs = switch.table.annot %>%
+  filter(switch.n == 1) %>%
+  filter(n_dbd_id1 == 0 & n_dbd_id2 == 0) %>%
+  pull(humantfs_gene_name) %>%
+  unique()
+
+cat("The number of TFs producing a single DBD+/DBD+ switch:", length(pospos.single.switch.tfs), "\n")
+
+cat("The number of TFs producing a single DBD+/DBD- switch:", length(posneg.single.switch.tfs), "\n")
+
+cat("The number of TFs producing a single DBD-/DBD- switch:", length(negneg.single.switch.tfs), "\n")
+
+multi.switch.tfs = switch.table.annot %>%
+  filter(switch.n > 1) %>%
+  pull(humantfs_gene_name) %>%
+  unique()
+
+cat("The number of TFs producing multiple switches:", length(multi.switch.tfs), "\n")
+```
+
+Test the overrepresentation of GO terms and pathways in the sets of TFs producing multiple switches or different types of single switches:
+
+```{r}
+test.signatures = list(pospos.single.switch.tfs,
+                       posneg.single.switch.tfs,
+                       negneg.single.switch.tfs,
+                       multi.switch.tfs)
+
+signature.names = c("Single +/+", "Single +/-", "Single -/-", "Multiple switches")
+
+test.collections = list(go.bp.sets,
+                        go.mf.sets,
+                        go.cc.sets,
+                        h.sets,
+                        c2.cp.sets)
+
+collection.names = c("go.bp", 
+                     "go.mf", 
+                     "go.cc", 
+                     "hallmark", 
+                     "canonical")
+
+test.background = switching.tfs
+
+overr.list = calc_overr(test.signatures,
+                        test.collections,
+                        test.background)
+
+overr.df = select_significant_overr(overr.list,
+                                    signature.names,
+                                    collection.names,
+                                    fdr = 0.1)
+
+overr.df
+```
+
+No overrepresentations.
+
+Test only the TFs that produce a single +/- switch:
+
+```{r}
+test.signatures = list(posneg.single.switch.tfs)
+
+signature.names = c("Single +/-")
+
+test.collections = list(go.bp.sets,
+                        go.mf.sets,
+                        go.cc.sets,
+                        h.sets,
+                        c2.cp.sets)
+
+collection.names = c("go.bp", 
+                     "go.mf", 
+                     "go.cc", 
+                     "hallmark", 
+                     "canonical")
+
+test.background = switching.tfs
+
+overr.list = calc_overr(test.signatures,
+                        test.collections,
+                        test.background)
+
+overr.df = select_significant_overr(overr.list,
+                                    signature.names,
+                                    collection.names,
+                                    fdr = 0.1)
+
+overr.df
+```
+
+Test the TFs that produce a single +/- switch against the set of GO Biological Process terms:
+
+```{r}
+test.signatures = list(posneg.single.switch.tfs)
+
+signature.names = c("Single +/-")
+
+test.collections = list(go.bp.sets)
+
+collection.names = c("go.bp")
+
+test.background = switching.tfs
+
+overr.list = calc_overr(test.signatures,
+                        test.collections,
+                        test.background)
+
+overr.df = select_significant_overr(overr.list,
+                                    signature.names,
+                                    collection.names,
+                                    fdr = 0.1)
+
+overr.df
+```
+
+Test the overrepresentation of TF families among the same sets of TFs:
+
+```{r}
+test.signatures = list(pospos.single.switch.tfs,
+                       posneg.single.switch.tfs,
+                       negneg.single.switch.tfs,
+                       multi.switch.tfs)
+
+signature.names = c("Single +/+", "Single +/-", "Single -/-", "Multiple switches")
+
+test.collections = list(all.tf.fam.collection)
+
+collection.names = c("All_TF_families")
+
+test.background = switching.tfs
+
+overr.list = calc_overr(test.signatures,
+                        test.collections,
+                        test.background)
+
+overr.df = select_significant_overr(overr.list,
+                                    signature.names,
+                                    collection.names,
+                                    fdr = 0.1)
+
+overr.df
+```
+
+No overrepresentations.
+
+Test only the TFs that produce a single +/- switch:
+
+```{r}
+test.signatures = list(posneg.single.switch.tfs)
+
+signature.names = c("Single +/-")
+
+test.collections = list(all.tf.fam.collection)
+
+collection.names = c("All_TF_families")
+
+test.background = switching.tfs
+
+overr.list = calc_overr(test.signatures,
+                        test.collections,
+                        test.background)
+
+overr.df = select_significant_overr(overr.list,
+                                    signature.names,
+                                    collection.names,
+                                    fdr = 0.1)
+
+overr.df
+```
+
+No overrepresentations.
+
+In total, groups of TFs formed by the number and types of switches are not enriched in GO terms, pathways or TF families. Therefore, single +/+, +/- and -/- switches, as well as the production of a single or multiple switches, is not specific to TFs involved in particular molecular processes or containing DBDs of particular structural types.
+
+## Check known switches in my switch set
+
+Upload the data:
+
+```{r}
+switch.table.annot = readRDS(paste0("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_switches_annot_cutoff_", diff.cutoff,".rds"))
+
+isoform.expression.tf.annot.bin = readRDS("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_dumped_named.rds")
+
+tf.isoform.ndbds = read.delim("../../data/results/base_dbd_expression_analysis_table.tsv")
+```
+
+1) IRF3:
+
+```{r}
+switch.table.annot %>%
+  filter(humantfs_gene_name == "IRF3")
+```
+
+The second switch should be the known one, between the brain and non-brain tissues (liver, as per the original paper): [Karpova et al., 2001](https://www.tandfonline.com/doi/full/10.1128/MCB.21.13.4169-4176.2001).
+
+2) TCF4:
+
+```{r}
+switch.table.annot %>%
+  filter(humantfs_gene_name == "TCF4")
+
+tf.isoform.ndbds %>%
+  filter(humantfs_gene_name == "TCF4") %>%
+  left_join(isoform.expression.tf.annot.bin %>%
+              dplyr::select(ensembl_gene_id,
+                            ensembl_transcript_id,
+                            matches("Brain"),
+                            Testis),
+            by = c("ensembl_gene_id" = "ensembl_gene_id",
+                   "ensembl_transcript_id" = "ensembl_transcript_id")) %>%
+  filter(!is.na(Testis))
+```
+
+Consequently, there is no DBD+/DBD+ switch because DBD+ isoforms of TCF4 are not expressed in the brain.
+
+3) HNF1A:
+
+```{r}
+switch.table.annot %>%
+  filter(humantfs_gene_name == "HNF1A")
+
+tf.isoform.ndbds %>%
+  filter(humantfs_gene_name == "HNF1A") %>%
+  left_join(isoform.expression.tf.annot.bin %>%
+              dplyr::select(ensembl_gene_id,
+                            ensembl_transcript_id,
+                            Liver,
+                            Pancreas),
+            by = c("ensembl_gene_id" = "ensembl_gene_id",
+                   "ensembl_transcript_id" = "ensembl_transcript_id")) %>%
+  filter(!is.na(Liver))
+```
+
+According to [Harries et al., 2006](https://academic.oup.com/hmg/article/15/14/2216/2355944#37432136) and [Harries et al., 2009](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0007855), we would expect a major isoform switch between the liver and the pancreas. However, in our data HNF1A demonstrates no switch between these tissues, because its major isoform is the same in the liver and pancreas. However, a switch does occur between two DBD+ non-major isoforms ENST00000400024 and ENST00000541395. The isoform ENST00000541395 is longer and is major in the liver, while the ENST00000400024 isoform is shorter and is major in the pancreas, which matches the results by [Harries et al., 2006](https://academic.oup.com/hmg/article/15/14/2216/2355944#37432136). The dominance of the isoform ENST00000257555 could be a quantification artifact, as its structure is almost identical to the structure of the isoform ENST00000541395, while all the exons of the isoform ENST00000400024, except for one, also seem to be identical to the exons of the isoform ENST00000257555. Consequently, the real signal that should have been distributed between the isoforms ENST00000400024 and ENST00000541395, making them major in the respective tissues, could have been assigned to the isoform ENST00000257555, making it major in both tissues. Moreover, the isoform ENST00000257555 was likely unexpressed in both tissues, because if it were expressed, then, probably, [Harries et al., 2006](https://academic.oup.com/hmg/article/15/14/2216/2355944#37432136) would have identified it with the same RT-PCR primers as they used to find one or the other of the two isoforms (if these isoforms indeed correspond to the isoforms ENST00000400024 and ENST00000541395). But in that case, the isoform ENST00000257555 would likely be the major in both tissues, as in our data.
+
+4) TEAD1:
+
+```{r}
+switch.table.annot %>%
+  filter(humantfs_gene_name == "TEAD1")
+
+tf.isoform.ndbds %>%
+  filter(humantfs_gene_name == "TEAD1") %>%
+  left_join(isoform.expression.tf.annot.bin %>%
+              dplyr::select(ensembl_gene_id,
+                            ensembl_transcript_id,
+                            matches("Heart"),
+                            matches("Muscle"),
+                            matches("Brain"),
+                            matches("Skin"),
+                            Lung,
+                            Liver,
+                            Pancreas,
+                            Stomach,
+                            matches("Intestine"),
+                            matches("Colon")),
+            by = c("ensembl_gene_id" = "ensembl_gene_id",
+                   "ensembl_transcript_id" = "ensembl_transcript_id")) %>%
+  filter(!is.na(Lung))
+```
+
+We may expect a DBD+/DBD+ switch between (a) the heart and muscles and (b) other tissues (brain, skin, kidney, lung, liver, pancreas, stomach, intestine, colon), according to the data in mouse [Choi et al., 2022](https://academic.oup.com/nar/article/50/15/8658/6607917). However, we observe no switch between these tissues, because the major isoform is the same across all these tissues (and, of note, it is DBD-). Additionally, there is no switch between the DBD+ isoforms that are expressed lower than the major DBD- one.
+
+5) MEF2 genes:
+
+a) MEF2A: there is a switch of the expected type (+/+) between the expected tissues, as per [https://www.jbc.org/article/S0021-9258(20)56576-9/fulltext](https://www.jbc.org/article/S0021-9258(20)56576-9/fulltext), but the differentially included exon is most probably different from the beta exon found switching in this paper. This may be due to the fact that the exon annotation of MEF2A in Ensembl v99 does not exactly match the exon structure of MEF2A outlined in [https://www.jbc.org/article/S0021-9258(20)56576-9/fulltext](https://www.jbc.org/article/S0021-9258(20)56576-9/fulltext).
+
+```{r}
+switch.table.annot %>%
+  filter(humantfs_gene_name == "MEF2A")
+
+tf.isoform.ndbds %>%
+  filter(humantfs_gene_name == "MEF2A") %>%
+  left_join(isoform.expression.tf.annot.bin %>%
+              dplyr::select(ensembl_gene_id,
+                            ensembl_transcript_id,
+                            matches("Heart"),
+                            matches("Muscle"),
+                            matches("Brain"),
+                            Ovary,
+                            Testis,
+                            Lung,
+                            Liver,
+                            Spleen),
+            by = c("ensembl_gene_id" = "ensembl_gene_id",
+                   "ensembl_transcript_id" = "ensembl_transcript_id"))
+```
+
+b) MEF2D:
+
+```{r}
+switch.table.annot %>%
+  filter(humantfs_gene_name == "MEF2D")
+```
+
+For the +/+ switch from [https://www.jbc.org/article/S0021-9258(20)56576-9/fulltext](https://www.jbc.org/article/S0021-9258(20)56576-9/fulltext), tissues do not match, and the inclusion of the beta exon is the other way round. For the +/+ switch from [https://genesdev.cshlp.org/content/27/11/1247.full](https://genesdev.cshlp.org/content/27/11/1247.full), even if we count tissues as matching, one of the switching isoforms is wrong. Overall, we do not find known switches of this TF gene.
+
+c) MEF2C:
+
+```{r}
+switch.table.annot %>%
+  filter(humantfs_gene_name == "MEF2C")
+```
+
+The switch in our data matches the switch in https://onlinelibrary.wiley.com/doi/10.1111/j.1365-2443.2009.01378.x: it's +/+, between the same tissues and the alternative inclusion of the alpha exons matches too.
+
+6) HNF4A:
+
+```{r}
+switch.table.annot %>%
+  filter(humantfs_gene_name == "HNF4A")
+```
+
+Switching tissues do not match those in [https://academic.oup.com/nar/article/26/2/497/1172700](https://academic.oup.com/nar/article/26/2/497/1172700), hence we do not find this known switch.
+
+Consequently, plot the switches of IRF3, MEF2C, MEF2A and HNF1A for a main figure (four panels, in this order). Finally, in the paper, summarise why I do not find other known switches that I found in the literature (HNF4A, MEF2D, TEAD1, TCF4).
+
+Prepare a general function for drawing linear plots of TF isoform expression:
+
+```{r}
+compile_isoform_expression = function(tf.transcripts, isof.category, tissue.names) {
+  tf.df = data.frame(ensembl_transcript_id = rep(tf.transcripts, times = rep(length(tissue.names), length(tf.transcripts))))
+  
+  tf.df$status = unlist(lapply(tf.transcripts,
+                               function(tr.id) {
+                                 n_dbd = tf.isoform.ndbds %>%
+                                   filter(ensembl_transcript_id == tr.id) %>%
+                                   pull(n_dbd)
+                                 
+                                 tr.category = isof.category[tf.transcripts == tr.id]
+                                 
+                                 status = ifelse(tr.category == "main",
+                                                 ifelse(n_dbd > 0, "1", "2"),
+                                                 ifelse(n_dbd > 0, "3", "4"))
+                                 
+                                 return(rep(status, length(tissue.names)))
+                               }))
+  
+  tf.df$status = factor(tf.df$status, levels = c("1", "2", "3", "4"))
+  
+  tf.df$tissue = rep(tissue.names, length(tf.transcripts))
+  
+  tf.df$tissue = factor(tf.df$tissue, levels = tissue.names)
+  
+  tf.df$expression_value = unlist(lapply(tf.transcripts,
+                                         function(tr.id) {
+                                           isoform.expression.tpm.df %>% 
+                                             filter(transcript_id == tr.id) %>% 
+                                             dplyr::select(all_of(tissue.names)) %>% 
+                                             as.numeric()
+                                         }))
+  
+  return(tf.df)
+}
+
+plot_isoform_expression = function(tf.name, isof.ids, isof.category, selected.tissue.names, path.to.pdf) {
+  isoform.expression.df = compile_isoform_expression(isof.ids, isof.category, selected.tissue.names)
+  
+  p = isoform.expression.df %>% 
+    ggplot(aes(x = tissue,
+               y = expression_value, 
+               group = ensembl_transcript_id,
+               color = status)) +
+    geom_line() + 
+    scale_colour_manual(values = c("1" = "red", 
+                                   "2" = "blue",
+                                   "3" = "#FBDDE0", 
+                                   "4" = "#DFDEEE")) + 
+    ylim(c(0, NA)) + 
+    ggtitle(tf.name) +
+    xlab("") +
+    ylab("Isoform expression (TPM)") + 
+    theme_classic() + 
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+          legend.position = "none")
+  
+  ggsave(paste0(path.to.pdf, "/", tf.name, "_isoform_expression_sorted_selected.pdf"),
+         p,
+         width = 15,
+         height = 6)
+}
+```
+
+Upload the data:
+
+```{r}
+isoform.expression.tpm.df = readRDS("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_dumped.rds")
+
+switch.table.annot = readRDS("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_switches_annot.rds")
+
+tf.isoform.ndbds = read.delim("../../data/results/base_dbd_expression_analysis_table.tsv")
+
+path.to.pdf = "../../data/results"
+```
+
+1) IRF3:
+
+```{r}
+isof.ids = c("ENST00000599144", "ENST00000309877")
+
+isof.category = c("main", "main")
+
+selected.tissue.names = c(unlist(stringr::str_split(switch.table.annot %>%
+                                                      filter(isof_id1 == isof.id2 & isof_id2 == isof.id1) %>%
+                                                      pull(isof2_tissues),
+                                                    fixed(","))),
+                          "Liver")
+
+tf.name = "IRF3"
+
+plot_isoform_expression(tf.name, isof.ids, isof.category, selected.tissue.names, path.to.pdf)
+```
+
+2) MEF2C: 
+
+```{r}
+isof.ids = c("ENST00000424173", "ENST00000504921")
+
+isof.category = c("main", "main")
+
+isof2.tissues = unlist(stringr::str_split(switch.table.annot %>%
+                                            filter(isof_id1 == isof.ids[1] & isof_id2 == isof.ids[2]) %>%
+                                            pull(isof2_tissues),
+                                          fixed(",")))
+
+selected.tissue.names = c("Muscle - Skeletal",
+                          unlist(stringr::str_match_all(isof2.tissues,
+                                                        "Brain.*|Spleen|Heart.*")))
+
+tf.name = "MEF2C"
+
+plot_isoform_expression(tf.name, isof.ids, isof.category, selected.tissue.names, path.to.pdf)
+```
+
+3) MEF2A:
+
+```{r}
+isof.ids = c("ENST00000338042", "ENST00000354410")
+
+isof.category = c("main", "main")
+
+isof2.tissues = unlist(stringr::str_split(switch.table.annot %>%
+                                            filter(isof_id1 == isof.ids[1] & isof_id2 == isof.ids[2]) %>%
+                                            pull(isof2_tissues),
+                                          fixed(",")))
+
+selected.tissue.names = c("Testis",
+                          "Ovary",
+                          "Spleen",
+                          "Liver",
+                          "Lung",
+                          isof2.tissues)
+
+tf.name = "MEF2A"
+
+plot_isoform_expression(tf.name, isof.ids, isof.category, selected.tissue.names, path.to.pdf)
+```
+
+4) HNF1A:
+
+```{r}
+isof.ids = c("ENST00000400024", "ENST00000541395", "ENST00000257555")
+
+isof.category = c("main", "main", "major")
+
+selected.tissue.names = c("Pancreas",
+                          "Liver")
+
+tf.name = "HNF1A"
+
+plot_isoform_expression(tf.name, isof.ids, isof.category, selected.tissue.names, path.to.pdf)
+```
+
+Calculate proportions of observed DBD+/DBD+, DBD+/DBD- and DBD-/DBD- switches among all possible ones:
+
+```{r}
+major.isoforms.dbdpos.df = data.frame(ensembl_transcript_id = major.isoforms.dbdpos,
+                                      transcript_type = "DBD+")
+
+major.isoforms.dbdneg.df = data.frame(ensembl_transcript_id = major.isoforms.dbdneg,
+                                      transcript_type = "DBD-")
+
+major.isoforms.both.df = major.isoforms.dbdpos.df %>%
+  bind_rows(major.isoforms.dbdneg.df)
+
+major.isoforms.df = isoform.expression.tf.annot.dom.isof %>%
+  dplyr::select(ensembl_gene_id,
+                ensembl_transcript_id) %>%
+  left_join(major.isoforms.both.df,
+            by = c("ensembl_transcript_id" = "ensembl_transcript_id"))
+
+major.isoforms.df %<>%
+  group_by(ensembl_gene_id) %>%
+  mutate(n_dbd_pos = sum(transcript_type == "DBD+")) %>%
+  mutate(n_dbd_neg = sum(transcript_type == "DBD-")) %>%
+  mutate(max_dbd_pos = n_dbd_pos * (n_dbd_pos - 1) / 2) %>%
+  mutate(max_dbd_neg = n_dbd_neg * (n_dbd_neg - 1) / 2) %>%
+  mutate(max_dbd_mix = n_dbd_pos * n_dbd_neg) %>%
+  ungroup() %>%
+  arrange(ensembl_gene_id) %>%
+  dplyr::select(-ensembl_transcript_id,
+                -transcript_type) %>%
+  distinct()
+
+max.dbd.pos = sum(major.isoforms.df$max_dbd_pos)
+
+max.dbd.neg = sum(major.isoforms.df$max_dbd_neg)
+
+max.dbd.mix = sum(major.isoforms.df$max_dbd_mix)
+
+cat("The maximum possible number of +/+ switches:", max.dbd.pos, "\n")
+
+cat("The maximum possible number of -/- switches:", max.dbd.neg, "\n")
+
+cat("The maximum possible number of +/- switches:", max.dbd.mix, "\n")
+
+switch.table.annot = readRDS(paste0("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_switches_annot_cutoff_", diff.cutoff,".rds"))
+
+pospos.n = switch.table.annot %>%
+  filter(n_dbd_id1 > 0 & n_dbd_id2 > 0) %>%
+  nrow()
+
+negneg.n = switch.table.annot %>%
+  filter(n_dbd_id1 == 0 & n_dbd_id2 == 0) %>%
+  nrow()
+
+posneg.n = switch.table.annot %>%
+  filter(n_dbd_id1 > 0 & n_dbd_id2 == 0 | n_dbd_id1 == 0 & n_dbd_id2 > 0) %>%
+  nrow()
+
+cat("The observed number of +/+ switches:", pospos.n, "\n")
+
+cat("The observed number of -/- switches:", negneg.n, "\n")
+
+cat("The observed number of +/- switches:", posneg.n, "\n")
+```
+
+Plot the proportions:
+
+```{r}
+pospos.obs.prop = pospos.n / max.dbd.pos
+
+negneg.obs.prop = negneg.n / max.dbd.neg
+
+posneg.obs.prop = posneg.n / max.dbd.mix
+
+p = data.frame(feature_type = c(rep("+/+", 2), rep("-/-", 2), rep("+/-", 2)),
+           feature_group = rep(c("obs", "rest"), 3),
+           feature_prop = c(pospos.obs.prop, 1 - pospos.obs.prop,
+                            negneg.obs.prop, 1 - negneg.obs.prop,
+                            posneg.obs.prop, 1 - posneg.obs.prop)) %>%
+  mutate(feature_type = factor(feature_type, levels = c("+/+", "-/-", "+/-"))) %>%
+  mutate(feature_group = factor(feature_group, levels = c("rest", "obs"))) %>%
+  ggplot(aes(x = feature_type,
+             y = feature_prop,
+             fill = feature_group)) +
+    geom_col() + 
+    theme_classic()
+
+p
+```

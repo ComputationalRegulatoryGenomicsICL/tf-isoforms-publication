@@ -1,0 +1,203 @@
+---
+title: "Comparison of DBD+ and DBD- isoforms"
+author: "Sviatoslav Sidorov"
+format: html
+editor: visual
+---
+
+## Load libraries
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(magrittr)
+```
+
+## Compare transcript support levels of DBD+ and DBD- TF isoforms
+
+Compare the support level for DBD+ and DBD- isoforms in the Ensembl human genome annotation.
+
+Load and extract the data:
+
+```{r}
+ensg_enst_attr = read.delim("../data/ensembl99/ensembl99_whole.tsv",
+                            header = T,
+                            sep = "\t",
+                            stringsAsFactors = F) %>%
+  dplyr::select(ensembl_gene_id,
+                ensembl_transcript_id,
+                transcript_tsl,
+                transcript_mane_select) %>%
+  distinct() %>%
+  rowwise() %>%
+  mutate(transcript_tsl = unlist(stringr::str_split(transcript_tsl, fixed(" ")))[1]) %>%
+  ungroup()
+
+tf.isoform.ndbds = read.delim("../data/results/base_dbd_expression_analysis_table.tsv")
+
+dbdneg.isoforms = tf.isoform.ndbds %>%
+  filter(n_dbd == 0) %>%
+  pull(ensembl_transcript_id)
+
+dbdpos.isoforms = tf.isoform.ndbds %>%
+  filter(n_dbd > 0) %>%
+  pull(ensembl_transcript_id)
+
+dbdneg.isoforms.attr = ensg_enst_attr %>%
+  filter(ensembl_transcript_id %in% dbdneg.isoforms)
+
+dbdpos.isoforms.attr = ensg_enst_attr %>%
+  filter(ensembl_transcript_id %in% dbdpos.isoforms)
+```
+
+Plot the fractions of DBD+ and DBD- isoforms with different TSLs:
+
+```{r}
+dbdpos.n = dbdpos.isoforms.attr %>%
+  nrow()
+
+dbdpos.tsl1.n = dbdpos.isoforms.attr %>%
+  filter(transcript_tsl == "tsl1") %>%
+  nrow()
+
+dbdpos.tsl2.n = dbdpos.isoforms.attr %>%
+  filter(transcript_tsl == "tsl2") %>%
+  nrow()
+
+dbdpos.other.n = dbdpos.isoforms.attr %>%
+  filter(!transcript_tsl %in% c("tsl1", "tsl2")) %>%
+  nrow()
+
+dbdneg.n = dbdneg.isoforms.attr %>%
+  nrow()
+
+dbdneg.tsl1.n = dbdneg.isoforms.attr %>%
+  filter(transcript_tsl == "tsl1") %>%
+  nrow()
+
+dbdneg.tsl2.n = dbdneg.isoforms.attr %>%
+  filter(transcript_tsl == "tsl2") %>%
+  nrow()
+
+dbdneg.other.n = dbdneg.isoforms.attr %>%
+  filter(!transcript_tsl %in% c("tsl1", "tsl2")) %>%
+  nrow()
+
+p = data.frame(transcript_type = c(rep("DBD+", 3), rep("DBD-", 3)),
+               transcript_category = rep(c("TSL1", "TSL2", "Other"), 2),
+               transcript_support = c(dbdpos.tsl1.n / dbdpos.n, dbdpos.tsl2.n / dbdpos.n, dbdpos.other.n / dbdpos.n,
+                                      dbdneg.tsl1.n / dbdneg.n, dbdneg.tsl2.n / dbdneg.n, dbdneg.other.n / dbdneg.n)) %>%
+  mutate(transcript_type = factor(transcript_type, levels = c("DBD+", "DBD-")),
+         transcript_category = factor(transcript_category, levels = c("TSL1", "TSL2", "Other"))) %>%
+  ggplot(aes(x = transcript_type,
+             y = transcript_support,
+             group = transcript_type)) +
+    geom_col(aes(fill = transcript_category)) +
+    theme_classic()
+
+ggsave("../data/results/comparison_dbdpos_dbdneg/plots/tsl_barplot.pdf",
+       p)
+
+cat("\n")
+
+cat("DBD+ with TSL1:", dbdpos.tsl1.n, "(", dbdpos.tsl1.n / dbdpos.n * 100, "% of all DBD+ )\n")
+
+cat("DBD- with TSL1:", dbdneg.tsl1.n, "(", dbdneg.tsl1.n / dbdneg.n * 100, "% of all DBD- )\n")
+```
+
+DBD+ isoforms are, on average, better supported than DBD- isoforms: while 71% of DBD+ isoforms have TSL1, only 49% of DBD- isoforms have TSL1, and almost all the rest of DBD- isoforms have the TSL2 flag. A TSL2 flag could be assigned if DBD- isoforms are uniformly low expressed across the source tissues and cell lines that are used in the Ensembl annotation pipeline, because in this case there will be, by definition, less quality evidence for the expression. This does not mean, though, that a half of DBD- isoforms are non-functional.
+
+## Compare MANE annotation for DBD+ and DBD- isoforms
+
+Calculate the fractions of DBD+ and DBD- isoforms that have a MANE tag:
+
+```{r}
+dbdpos.mane.n = dbdpos.isoforms.attr %>% 
+  filter(transcript_mane_select != "") %>% 
+  nrow()
+
+dbdneg.mane.n = dbdneg.isoforms.attr %>% 
+  filter(transcript_mane_select != "") %>% 
+  nrow()
+
+p = data.frame(transcript_type = c(rep("DBD+", 2), rep("DBD-", 2)),
+               transcript_category = rep(c("MANE", "Non-MANE"), 2),
+               transcript_support = c(dbdpos.mane.n / dbdpos.n, 1 - dbdpos.mane.n / dbdpos.n,
+                                      dbdneg.mane.n / dbdneg.n, 1 - dbdneg.mane.n / dbdneg.n)) %>%
+  mutate(transcript_type = factor(transcript_type, levels = c("DBD+", "DBD-")),
+         transcript_category = factor(transcript_category, levels = c("MANE", "Non-MANE"))) %>%
+  ggplot(aes(x = transcript_type,
+             y = transcript_support,
+             group = transcript_type)) +
+    geom_col(aes(fill = transcript_category)) +
+    theme_classic()
+
+ggsave("../data/results/comparison_dbdpos_dbdneg/plots/mane_barplot.pdf",
+       p)
+
+cat("\n")
+
+cat("DBD+ with MANE:", dbdpos.mane.n, "(", dbdpos.mane.n / dbdpos.n * 100, "% of all",  dbdpos.n, "DBD+ )\n")
+
+cat("DBD- with MANE:", dbdneg.mane.n, "(", dbdneg.mane.n / dbdneg.n * 100, "% of all",  dbdneg.n, "DBD- )\n")
+```
+
+Only 32% of DBD+ isoforms have a MANE tag. However, MANE tags are not very informative as to the annotation quality, as they mark isoforms which are not only identical in the Ensembl and NCBI annotations but also are regarded by both collaborations as "the most biologically relevant" ones (<https://www.ensembl.org/info/genome/genebuild/transcript_quality_tags.html>). This may not make sense exactly because different isoforms may be relevant in different tissues, or the coexpression of isoforms may be biologically relevant, instead of the expression of only one particular isoform. Consequently, not all identically annotated isoforms may have MANE tags (which would be more useful in the assessment of the isoform annotation support). Also, the selection of "the most biologically relevant" isoforms must be a reason for DBD- isoforms not having this tag.
+
+Consequently, I do not plan on any further filtering of TF isoforms by the annotation quality.
+
+However, check how many TFs I still have if I narrow down my whole analysis to TSL1 isoforms:
+
+```{r}
+tfs.n = dbdneg.isoforms.attr %>%
+  bind_rows(dbdpos.isoforms.attr) %>%
+  arrange(ensembl_gene_id) %>%
+  pull(ensembl_gene_id) %>%
+  unique() %>%
+  length()
+
+tfs.tsl1 = dbdneg.isoforms.attr %>%
+  bind_rows(dbdpos.isoforms.attr) %>%
+  filter(transcript_tsl == "tsl1") %>%
+  arrange(ensembl_gene_id) %>%
+  pull(ensembl_gene_id) %>%
+  unique() %>%
+  length()
+
+cat("TFs with at least one TSL1 isoform:", tfs.tsl1, "(", tfs.tsl1 / tfs.n * 100, "% out of", tfs.n, ")\n")
+```
+
+The majority of TFs (86%) have at least one TSL1 isoform; consequently, if I narrow down my analysis to only TSL1 isoforms, it will still be fairly genome-wide: I would lose a quarter of all DBD+ isoforms and a half of DBD- isoforms.
+
+## Check isoform count normalisation
+
+```{r}
+isoform.deseq2.tissue.counts = readRDS("../data/results/gtex8_processed/tfs_nontfs_isoforms_deseq2-normalised_final_selected.rds")
+
+tissue.names = names(isoform.deseq2.tissue.counts)[!names(isoform.deseq2.tissue.counts) %in% c("transcript_id", "gene_id")]
+
+isoform.deseq2.tissue.counts.stats = isoform.deseq2.tissue.counts %>%
+  dplyr::select(-transcript_id,
+                -gene_id) %>%
+  rowwise() %>%
+  mutate(isoform_mean = mean(c_across(all_of(tissue.names))),
+         isoform_var = var(c_across(all_of(tissue.names)))) %>%
+  ungroup() %>%
+  dplyr::select(isoform_mean,
+                isoform_var)
+
+p = isoform.deseq2.tissue.counts.stats %>%
+  slice_sample(n = 10000) %>%
+  ggplot(aes(x = log10(isoform_mean),
+             y = log10(isoform_var))) +
+    geom_point(colour = "black") +
+    xlim(-3, 10) +
+    ylim(-3, 10) +
+    theme_classic()
+
+ggsave("../data/results/comparison_dbdpos_dbdneg/plots/isoform_med_deseq2_counts_var_vs_mean_sample10000.pdf",
+       p)
+```
+
+The variance clearly depends on the mean (which is expected from the negative binomial distribution of expression counts), but I do no know why the maximum variance is clearly limited.

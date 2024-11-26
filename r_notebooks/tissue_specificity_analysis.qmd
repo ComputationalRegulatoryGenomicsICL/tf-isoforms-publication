@@ -1,0 +1,667 @@
+---
+title: "Tissue specificity analysis"
+author: "Sviatoslav Sidorov"
+format: html
+editor: visual
+---
+
+## Load libraries
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(magrittr)
+library(stringr)
+```
+
+## Define constants
+
+```{r}
+min.norm.count = 5 # Min DESeq2-normalised count to deem an isoform expressed in a tissue
+```
+
+## Calculate tissue specificity of gene and isoform expression
+
+Prepare a function to calculate tau score (a tissue specificity measure):
+
+```{r}
+calc_tissue_specificity = function(count.df) {
+  clean.df = count.df %>%
+    dplyr::select(-transcript_id,
+                  -gene_id)
+  
+  max.expression = max(t(clean.df[1, ]))
+  
+  if (max.expression > 0) {
+    expr.to.max = t(clean.df[1, ]) / max.expression
+    
+    tau.score = sum(1 - expr.to.max) / (length(expr.to.max) - 1)
+  } else {
+    tau.score = 0
+  }
+  
+  return(tau.score)
+}
+```
+
+Calculate the tissue specificity of expressed TF isoforms:
+
+```{r}
+tfs.med.isoforms = readRDS("../../data/results/gtex8_processed/tfs_selected_table_deseq2_selected_med_expr.rds")
+
+tfs.med.isoforms.annot = tfs.med.isoforms %>%
+  dplyr::select(transcript_id,
+                gene_id)
+
+tfs.med.isoforms.counts = tfs.med.isoforms %>%
+  dplyr::select(-transcript_id,
+                -gene_id)
+
+tfs.med.isoforms.dumped = as.data.frame(apply(tfs.med.isoforms.counts,
+                                              c(1, 2),
+                                              function(x) ifelse(x >= min.norm.count, x, 0))) # low expression dumping
+
+tfs.med.isoforms = tfs.med.isoforms.annot %>%
+  bind_cols(tfs.med.isoforms.dumped)
+
+tfs.med.isoforms.ts = tfs.med.isoforms %>%
+  group_by(transcript_id) %>%
+  do(mutate(., tissue_specificity = calc_tissue_specificity(.))) %>%
+  ungroup() %>%
+  dplyr::select(transcript_id,
+                gene_id,
+                tissue_specificity)
+
+saveRDS(tfs.med.isoforms.ts,
+        "../../data/results/gtex8_processed/tfs_isoforms_deseq2-normalised_final_selected_ts.rds")
+```
+
+## Check the distribution of TF isoform tissue specificity
+
+Plot the distribution of the isoform tissue specificity based on dumped expression:
+
+```{r}
+tfs.med.isoforms.ts = readRDS("../../data/results/gtex8_processed/tfs_isoforms_deseq2-normalised_final_selected_ts.rds")
+
+p = tfs.med.isoforms.ts %>%
+  ggplot(aes(x = tissue_specificity)) +
+    geom_histogram(fill = "darkgreen",
+                   bins = 40) +
+    theme_classic() + 
+    theme(legend.position = "none")
+
+ggsave("../../data/results/tissue_specificity/plots/tf_isoform_tissue_specificity_hist.pdf",
+       p)
+
+# p
+```
+
+Compare this distribution with one based on non-dumped counts to make sure that dumping does not radically change the distribution:
+
+```{r}
+tfs.med.isoforms.orig = readRDS("../../data/results/gtex8_processed/tfs_selected_table_deseq2_selected_med_expr.rds")
+
+tfs.med.isoforms.ts.orig = tfs.med.isoforms.orig %>%
+  group_by(transcript_id) %>%
+  do(mutate(., tissue_specificity = calc_tissue_specificity(.))) %>%
+  ungroup() %>%
+  dplyr::select(transcript_id,
+                gene_id,
+                tissue_specificity)
+
+saveRDS(tfs.med.isoforms.ts.orig,
+        "../../data/results/gtex8_processed/tfs_isoforms_deseq2-normalised_final_selected_ts_nodump.rds")
+
+p = tfs.med.isoforms.ts.orig %>%
+  mutate(is_dumped = "No") %>%
+  bind_rows(tfs.med.isoforms.ts %>%
+              mutate(is_dumped = "Yes")) %>%
+  mutate(is_dumped = factor(is_dumped, levels = c("No", "Yes"))) %>%
+  ggplot(aes(x = tissue_specificity)) +
+    geom_histogram(aes(fill = is_dumped),
+                   bins = 40,
+                   position = "identity",
+                   alpha = 0.5) +
+    theme_classic()
+
+ggsave("../../data/results/tissue_specificity/plots/tf_isoform_tissue_specificity_density_dump_vs_nodump.pdf",
+       p)
+
+# p
+```
+
+Dumping increases the number of very tissue-specific isoforms, as expected. Make the dumped expression continuous by first subtracting `min.norm.count` from each expression value and then turning all negative values into zero; then re-calculate the isoform tissue specificity:
+
+```{r}
+tfs.med.isoforms = readRDS("../../data/results/gtex8_processed/tfs_selected_table_deseq2_selected_med_expr.rds")
+
+tfs.med.isoforms.annot = tfs.med.isoforms %>%
+  dplyr::select(transcript_id,
+                gene_id)
+
+tfs.med.isoforms.counts = tfs.med.isoforms %>%
+  dplyr::select(-transcript_id,
+                -gene_id)
+
+tfs.med.isoforms.dumped = as.data.frame(apply(tfs.med.isoforms.counts,
+                                              c(1, 2),
+                                              function(x) {
+                                                ifelse(x - min.norm.count < 0, 
+                                                       0, 
+                                                       x - min.norm.count)
+                                              }))
+
+tfs.med.isoforms = tfs.med.isoforms.annot %>%
+  bind_cols(tfs.med.isoforms.dumped)
+
+saveRDS(tfs.med.isoforms,
+       "../../data/results/gtex8_processed/tfs_selected_table_deseq2_selected_med_expr_cont.rds")
+
+tfs.med.isoforms.ts = tfs.med.isoforms %>%
+  group_by(transcript_id) %>%
+  do(mutate(., tissue_specificity = calc_tissue_specificity(.))) %>%
+  ungroup() %>%
+  dplyr::select(transcript_id,
+                gene_id,
+                tissue_specificity)
+
+saveRDS(tfs.med.isoforms.ts,
+        "../../data/results/gtex8_processed/tfs_isoforms_deseq2-normalised_final_selected_ts_cont.rds")
+```
+
+Plot the new distribution, in comparison to the old one:
+
+```{r}
+tfs.med.isoforms.ts.orig = readRDS("../../data/results/gtex8_processed/tfs_isoforms_deseq2-normalised_final_selected_ts.rds")
+
+tfs.med.isoforms.ts.cont = readRDS("../../data/results/gtex8_processed/tfs_isoforms_deseq2-normalised_final_selected_ts_cont.rds")
+
+p = tfs.med.isoforms.ts.orig %>%
+  mutate(is_cont = "No") %>%
+  bind_rows(tfs.med.isoforms.ts.cont %>%
+              mutate(is_cont = "Yes")) %>%
+  mutate(is_cont = factor(is_cont, levels = c("No", "Yes"))) %>%
+  ggplot(aes(x = tissue_specificity)) +
+    geom_histogram(aes(fill = is_cont),
+                   bins = 40,
+                   position = "identity",
+                   alpha = 0.5) +
+    theme_classic()
+
+ggsave("../../data/results/tissue_specificity/plots/tf_isoform_tissue_specificity_density_noncont_vs_cont.pdf",
+       p)
+
+# p
+```
+
+Actually, the tissue specificity distribution shifted towards the greater scores even more! It can be explained by the fact that in the formula for the tau score
+
+$$
+\tau = \frac{\sum_{i=1}^n \left(1-\hat{x}_i\right)}{n-1},\,\hat{x}_i=\frac{x_i}{\max_{1\leq j\leq n} x_j}
+$$
+
+$\hat{x}_i$ becomes smaller after the subtraction of the `min.norm.count` constant from the numerator and denominator, as the denominator, by definition, is at least as large as any numerator. Consequently, the sum in the numerator in the formula for the tau score becomes larger, and so does the tau score.
+
+Nevertheless, let us use the tau scores based on the "continuous" expression values, because they are more natural than the thresholded ones:
+
+```{r}
+tfs.med.isoforms.ts = readRDS("../../data/results/gtex8_processed/tfs_isoforms_deseq2-normalised_final_selected_ts_cont.rds")
+
+p = tfs.med.isoforms.ts.cont %>%
+  ggplot(aes(x = tissue_specificity)) +
+    geom_histogram(fill = "darkgreen",
+                   bins = 40,
+                   position = "identity") +
+    theme_classic() + 
+    theme(legend.position = "none")
+
+ggsave("../../data/results/tissue_specificity/plots/tf_isoform_tissue_specificity_hist_cont.pdf",
+       p)
+
+# p
+```
+
+## Verify the distribution
+
+Check which of the DNA-binding GTF subunits I have in my dataset:
+
+```{r}
+dna.binding.gtfs = c("ENSG00000112592", # TBP
+                     "ENSG00000147133", # TAF1
+                     "ENSG00000064313", # TAF2
+                     "ENSG00000106290", # TAF6
+                     "ENSG00000273841", # TAF9
+                     "ENSG00000137947", # GTF2B (TFIIB)
+                     "ENSG00000108312", # UBTF
+                     "ENSG00000115750", # TAF1B
+                     "ENSG00000120656", # TAF12
+                     "ENSG00000085721", # RRN3
+                     "ENSG00000165684", # SNAPC4
+                     "ENSG00000122034", # GTF3A
+                     "ENSG00000185024", # BRF1
+                     "ENSG00000104221", # BRF2
+                     "ENSG00000148308", # GTF3C5
+                     "ENSG00000077235") # GTF3C1
+
+names(dna.binding.gtfs) = c("TBP",
+                            "TAF1",
+                            "TAF2",
+                            "TAF6",
+                            "TAF9",
+                            "GTF2B",
+                            "UBTF",
+                            "TAF1B",
+                            "TAF12",
+                            "RRN3",
+                            "SNAPC4",
+                            "GTF3A",
+                            "BRF1",
+                            "BRF2",
+                            "GTF3C5",
+                            "GTF3C1")
+
+tfs.med.isoforms.ts = readRDS("../../data/results/gtex8_processed/tfs_isoforms_deseq2-normalised_final_selected_ts_cont.rds")
+
+dna.binding.gtfs.ts = tfs.med.isoforms.ts %>%
+  filter(gene_id %in% dna.binding.gtfs) %>%
+  left_join(data.frame(gene_id = dna.binding.gtfs,
+                       gene_name = names(dna.binding.gtfs)),
+            by = c("gene_id" = "gene_id"))
+
+dna.binding.gtfs.ts
+```
+
+Plot the tissue specificities of the isoforms of the selected GTFs:
+
+```{r}
+p = dna.binding.gtfs.ts %>%
+  ggplot(aes(x = gene_name,
+             y = tissue_specificity)) +
+    geom_point(aes(colour = gene_name),
+               size = 3) +
+    lims(y = c(0, 1)) +
+    theme_classic()
+
+ggsave("../../data/results/tissue_specificity/plots/gtf_isoform_ts_cont_nolog.pdf",
+       p)
+
+# p
+```
+
+Even taking into account that particular isoforms of the selected GTFs could be tissue-specific, the minimal specificity of the isoforms is still unnaturally high.
+
+Plot the expression profiles of individual isoforms:
+
+```{r}
+tfs.med.isoforms = readRDS("../../data/results/gtex8_processed/tfs_selected_table_deseq2_selected_med_expr_cont.rds")
+
+gtf.plots = lapply(dna.binding.gtfs.ts$transcript_id,
+                   function(x) {
+                     gene_id = tfs.med.isoforms %>% 
+                       filter(transcript_id == x) %>%
+                       pull(gene_id)
+                     
+                     gene_name = unique(names(dna.binding.gtfs)[dna.binding.gtfs == gene_id])
+                     
+                     isoform_id = x
+                     
+                     tau = dna.binding.gtfs.ts %>%
+                       filter(transcript_id == x) %>%
+                       pull(tissue_specificity)
+                     
+                     p = tfs.med.isoforms %>% 
+                       filter(transcript_id == x) %>% 
+                       t() %>% 
+                       as.data.frame() %>% 
+                       tibble::rownames_to_column(var = "tissue_name") %>% 
+                       dplyr::rename("expression" = "V1") %>% 
+                       dplyr::slice(c(-1, -2)) %>%
+                       mutate(expression = as.numeric(expression)) %>%
+                       ggplot(aes(x = tissue_name,
+                                  y = expression)) +
+                         geom_col(fill = "red") +
+                         ggtitle(paste0(isoform_id, " (", gene_name, "), tau = ", round(tau, 2))) +
+                         theme_classic() +
+                         theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+                     
+                     ggsave(paste0("../../data/results/tissue_specificity/plots/gtf_isoform_ts_cont_nolog_", 
+                                   gene_name, "_", isoform_id, ".pdf"),
+                            p)
+                     
+                     return(p)
+                   })
+
+# gtf.plots
+```
+
+Hence, the tau score is very sensitive to expression peaking in particular tissues even if the isoform is expressed across the majority of tissues. Consequently, shrinking variance with a log2-transformation should help to differentiate between truly tissue-specific isoforms (that are counted as expressed in a small number of tissues) and isoforms that are broadly expressed (and hence are not really tissue-specific) but are enriched in particular tissues.
+
+Prepare a function for tissue-specificity calculation based on log2-transformed DESeq2-normalised counts:
+
+```{r}
+calc_tissue_specificity_log2 = function(count.df) {
+  clean.df = count.df %>%
+    dplyr::select(-transcript_id,
+                  -gene_id)
+  
+  clean.df = log2(clean.df + 1)
+  
+  max.expression = max(t(clean.df[1, ]))
+  
+  if (max.expression > 0) {
+    expr.to.max = t(clean.df[1, ]) / max.expression
+    
+    tau.score = sum(1 - expr.to.max) / (length(expr.to.max) - 1)
+  } else {
+    tau.score = 0
+  }
+  
+  return(tau.score)
+}
+```
+
+Re-calculate tissue specificity of TF isoforms with the log2-transformation:
+
+```{r}
+tfs.med.isoforms = readRDS("../../data/results/gtex8_processed/tfs_selected_table_deseq2_selected_med_expr_cont.rds")
+
+tfs.med.isoforms.ts.log2 = tfs.med.isoforms %>%
+  group_by(transcript_id) %>%
+  do(mutate(., tissue_specificity = calc_tissue_specificity_log2(.))) %>%
+  ungroup() %>%
+  dplyr::select(transcript_id,
+                gene_id,
+                tissue_specificity)
+
+saveRDS(tfs.med.isoforms.ts.log2,
+        "../../data/results/gtex8_processed/tfs_isoforms_deseq2-normalised_final_selected_ts_log2_cont.rds")
+```
+
+Plot the new overall tissue specificity distribution of TF isoforms:
+
+```{r}
+tfs.med.isoforms.ts.log2 = readRDS("../../data/results/gtex8_processed/tfs_isoforms_deseq2-normalised_final_selected_ts_log2_cont.rds")
+
+p = tfs.med.isoforms.ts.log2 %>%
+  ggplot(aes(x = tissue_specificity)) +
+    geom_histogram(fill = "darkgreen",
+                   bins = 40,
+                   position = "identity") +
+    theme_classic() + 
+    theme(legend.position = "none")
+
+# p
+
+ggsave("../../data/results/tissue_specificity/plots/tf_isoform_tissue_specificity_hist_cont_log2.pdf",
+       p)
+```
+
+Check the tissue specificity of the same GTF isoforms:
+
+```{r}
+dna.binding.gtfs.ts.log2 = tfs.med.isoforms.ts.log2 %>%
+  filter(gene_id %in% dna.binding.gtfs) %>%
+  left_join(data.frame(gene_id = dna.binding.gtfs,
+                       gene_name = names(dna.binding.gtfs)),
+            by = c("gene_id" = "gene_id"))
+
+dna.binding.gtfs.ts.log2
+
+p = dna.binding.gtfs.ts.log2 %>%
+  ggplot(aes(x = gene_name,
+             y = tissue_specificity)) +
+    geom_point(aes(colour = gene_name),
+               size = 3) +
+    lims(y = c(0, 1)) +
+    theme_classic()
+
+ggsave("../../data/results/tissue_specificity/plots/gtf_isoform_ts_log2_cont.pdf",
+       p)
+
+# p
+```
+
+These specificities make more sense for GTFs.
+
+Plot the expression profiles of individual isoforms:
+
+```{r}
+tfs.med.isoforms = readRDS("../../data/results/gtex8_processed/tfs_selected_table_deseq2_selected_med_expr_cont.rds")
+
+gtf.plots.log2 = lapply(dna.binding.gtfs.ts.log2$transcript_id,
+                        function(x) {
+                          gene_id = tfs.med.isoforms %>% 
+                            filter(transcript_id == x) %>%
+                            pull(gene_id)
+                         
+                          gene_name = unique(names(dna.binding.gtfs)[dna.binding.gtfs == gene_id])
+                         
+                          isoform_id = x
+                         
+                          tau = dna.binding.gtfs.ts.log2 %>%
+                            filter(transcript_id == x) %>%
+                            pull(tissue_specificity)
+                         
+                          p = tfs.med.isoforms %>% 
+                            filter(transcript_id == x) %>% 
+                            t() %>% 
+                            as.data.frame() %>% 
+                            tibble::rownames_to_column(var = "tissue_name") %>% 
+                            dplyr::rename("expression" = "V1") %>% 
+                            dplyr::slice(c(-1, -2)) %>%
+                            mutate(expression = as.numeric(expression)) %>%
+                            ggplot(aes(x = tissue_name,
+                                       y = log2(expression + 1))) +
+                              geom_col(fill = "red") +
+                              ggtitle(paste0(isoform_id, " (", gene_name, "), tau = ", round(tau, 2))) +
+                              theme_classic() +
+                              theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+                         
+                          ggsave(paste0("../../data/results/tissue_specificity/plots/gtf_isoform_ts_log2_cont_", 
+                                        gene_name, "_", isoform_id, ".pdf"),
+                                 p)
+                         
+                          return(p)
+                        })
+
+# gtf.plots.log2
+```
+
+As expected, the variance shrinkage made the expression of the broadly expressed GTF subunits more uniform while leaving the expression pattern of the highly tissue-specific isoform (ENST00000540980) unchanged.
+
+Check the isoform specificities of broadly expressed TFs after the log2-transformation of the expression values:
+
+```{r}
+nonspecific.tfs = c("ENSG00000141510", # TP53
+                    "ENSG00000115415", # STAT1
+                    "ENSG00000170581", # STAT2
+                    "ENSG00000168610", # STAT3
+                    "ENSG00000123268", # ATF1
+                    "ENSG00000128272", # ATF4
+                    "ENSG00000118217", # ATF6
+                    "ENSG00000116731") # PRDM2
+
+names(nonspecific.tfs) = c("TP53",
+                           "STAT1",
+                           "STAT2",
+                           "STAT3",
+                           "ATF1",
+                           "ATF4",
+                           "ATF6",
+                           "PRDM2")
+
+nonspecific.tfs.ts.log2 = tfs.med.isoforms.ts.log2 %>%
+  filter(gene_id %in% nonspecific.tfs) %>%
+  left_join(data.frame(gene_id = nonspecific.tfs,
+                       gene_name = names(nonspecific.tfs)),
+            by = c("gene_id" = "gene_id"))
+
+nonspecific.tfs.ts.log2
+
+p = nonspecific.tfs.ts.log2 %>%
+  ggplot(aes(x = gene_name,
+             y = tissue_specificity)) +
+    geom_point(aes(colour = gene_name),
+               size = 3) +
+    lims(y = c(0, 1)) +
+    theme_classic()
+
+ggsave("../../data/results/tissue_specificity/plots/broad_tfs_isoform_ts_log2_cont.pdf",
+       p)
+
+# p
+```
+
+Check the isoform specificities of very tissue-specific TFs after the log2-transformation of the expression values:
+
+```{r}
+specific.tfs = c("ENSG00000106331", # PAX4
+                 "ENSG00000007372", # PAX6
+                 "ENSG00000112238", # PRDM13
+                 "ENSG00000129152", # MYOD1
+                 "ENSG00000184221", # OLIG1
+                 "ENSG00000205927", # OLIG2
+                 "ENSG00000008196", # TFAP2B
+                 "ENSG00000124092") # CTCFL
+
+names(specific.tfs) = c("PAX4",
+                        "PAX6",
+                        "PRDM13",
+                        "MYOD1",
+                        "OLIG1",
+                        "OLIG2",
+                        "TFAP2B",
+                        "CTCFL")
+
+specific.tfs.ts.log2 = tfs.med.isoforms.ts.log2 %>%
+  filter(gene_id %in% specific.tfs) %>%
+  left_join(data.frame(gene_id = specific.tfs,
+                       gene_name = names(specific.tfs)),
+            by = c("gene_id" = "gene_id"))
+
+specific.tfs.ts.log2
+
+p = specific.tfs.ts.log2 %>%
+  ggplot(aes(x = gene_name,
+             y = tissue_specificity)) +
+    geom_point(aes(colour = gene_name),
+               size = 3) +
+    lims(y = c(0, 1)) +
+    theme_classic()
+
+ggsave("../../data/results/tissue_specificity/plots/specific_tfs_isoform_ts_log2_cont.pdf",
+       p)
+
+# p
+```
+
+The specificities of the isoforms look adequate for the tissue specific TFs.
+
+## Compare tissue specificity of DBD+ and DBD- isoforms
+
+Compare the distributions of tissue specificity of DBD+ and DBD- isoforms:
+
+```{r}
+tf.isoform.ndbds = read.delim("../../data/results/base_dbd_expression_analysis_table.tsv")
+
+dbdneg.isoforms = tf.isoform.ndbds %>%
+  filter(n_dbd == 0) %>%
+  pull(ensembl_transcript_id)
+
+dbdpos.isoforms = tf.isoform.ndbds %>%
+  filter(n_dbd > 0) %>%
+  filter(!ensembl_transcript_id %in% c("ENST00000444486", "ENST00000434737")) %>% # Remove fusion isoforms
+  pull(ensembl_transcript_id)
+
+tfs.med.isoforms.ts.log2 = readRDS("../../data/results/gtex8_processed/tfs_isoforms_deseq2-normalised_final_selected_ts_log2_cont.rds")
+
+tfs.med.isoforms.ts = tfs.med.isoforms.ts.log2
+
+tfs.med.isoforms.ts.dbdtype = tfs.med.isoforms.ts %>%
+  mutate(category = ifelse(transcript_id %in% dbdpos.isoforms, 
+                           "DBD+",
+                           ifelse(transcript_id %in% dbdneg.isoforms,
+                                  "DBD-",
+                                  "Error")))
+
+p = tfs.med.isoforms.ts.dbdtype %>%
+  mutate(category = factor(category, levels = c("DBD+", "DBD-"))) %>%
+  ggplot(aes(x = tissue_specificity)) +
+    geom_histogram(aes(fill = category),
+                   bins = 40,
+                   position = "identity",
+                   alpha = 0.5) +
+    theme_classic()
+
+ggsave("../../data/results/tissue_specificity/plots/tf_isoform_tissue_specificity_dbdpos_vs_dbdneg_hist.pdf",
+       p)
+
+p
+```
+
+The bimodal distribution of DBD+ isoforms is extremely pronounced, while the bimodal distribution of DBD- isoforms is much more subtle and demonstrates a bias towards higher tau scores. This could be due to the fact that DBD- isoforms are, in general, expressed at lower levels than DBD+ isoforms and hence may reach the expression cutoff only in particular tissues.
+
+## Compare tissue specificity of DBD+ and DBD- isoforms controlling for buffered expression
+
+Compare the tissue specificity of DBD+ and DBD- isoforms within bins of comparable buffered expression levels:
+
+```{r}
+isoform.buf.expr.df = readRDS("../../data/results/gtex8_processed/tf_nontf_isoform_buffered_expr_deseq2.rds")
+
+tfs.med.isoforms.ts.dbdtype.buff = tfs.med.isoforms.ts.dbdtype %>%
+  left_join(isoform.buf.expr.df %>%
+              dplyr::select(-gene_id),
+            by = c("transcript_id" = "transcript_id"))
+
+tfs.med.isoforms.ts.dbdtype.buff.binned = tfs.med.isoforms.ts.dbdtype.buff %>%
+  mutate(buff_expr_bin = ntile(buff_expr, n = 10))
+
+p = tfs.med.isoforms.ts.dbdtype.buff.binned %>%
+  mutate(buff_expr_bin = factor(buff_expr_bin, levels = seq(10))) %>%
+  mutate(category = factor(category, levels = c("DBD+", "DBD-"))) %>%
+  ggplot(aes(x = buff_expr_bin,
+             y = tissue_specificity,
+             fill = category)) +
+    geom_boxplot() +
+    theme_classic()
+
+ggsave("../../data/results/tissue_specificity/plots/tf_isoform_tissue_specificity_vs_binned_buffered_expression.pdf",
+       p)
+
+# p
+```
+
+Among the lower-expressed isoforms, DBD+ ones are more tissue-specific than DBD- ones, while among the higher-expressed isoforms the specificities of the DBD+ and DBD- isoforms become comparably low. The overall downwards trend is likely due to the fact that, by the design of the tau score calculated based on log2-transformed counts, the lower-expressed isoforms (whether DBD+ or DBD-) are more tissue specific than the higher-expressed ones. But it is interesting that there are DBD- isoforms that are highly expressed in many tissues.
+
+Show that the isoform tissue specificity indeed anticorrelates with the isoform expression level:
+
+```{r}
+p = tfs.med.isoforms.ts.dbdtype.buff %>%
+  ggplot(aes(x = buff_expr,
+             y = tissue_specificity)) +
+    geom_density_2d_filled(bins = 10) +
+    scale_x_continuous(trans = "log10") +
+    theme_classic()
+
+ggsave("../../data/results/tissue_specificity/plots/tf_isoform_tissue_specificity_vs_buffered_expression.pdf",
+       p)
+
+# p
+```
+
+Indeed, the plot shows the anticorrelation. Calculate the coefficient of Pearson correlation between the expression level and the tissue specificity of TF isoforms:
+
+```{r}
+cor(x = tfs.med.isoforms.ts.dbdtype.buff$buff_expr, 
+    y = tfs.med.isoforms.ts.dbdtype.buff$tissue_specificity, 
+    method = "pearson")
+```
+
+```{r}
+library()
+dr_mart = useEnsembl(biomart = "genes", 
+                     version = "111")
+                     # dataset = "drario_gene_ensembl",
+
+dr_mart.dfs = listDatasets(dr_mart)
+```

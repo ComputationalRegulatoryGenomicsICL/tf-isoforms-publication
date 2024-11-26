@@ -1,0 +1,726 @@
+---
+title: "Expression count preprocessing"
+author: "Sviatoslav Sidorov"
+format: html
+editor: visual
+---
+
+## Load libraries
+
+```{r}
+library(dplyr)
+library(magrittr)
+library(stringr)
+library(tibble)
+# library(rtracklayer)
+library(matrixStats)
+```
+
+## Define constants
+
+```{r}
+min.num.samples = 100 # Min number of samples in a tissue
+
+num.samples.to.select = 50 # Number of samples to select in a tissue
+
+min.norm.count = 5 # Min DESeq2-normalised count to deem an isoform expressed in a tissue
+# Because DESeq2 normalisation does not take isoform length into account,
+# thresholding DESeq2-normalised counts disfavours very short isoforms, but 
+# we suppose that even a very short isoform should produce at least min.norm.count of reads
+# to be biologically interesting.
+
+max.noise.count = 3 # Max noise raw read count per tissue
+```
+
+## Select tissue samples
+
+Load the sample annotation table:
+
+```{r}
+gtex.annot = read.delim("../../data/gtex8/GTEx_Analysis_v8_Annotations_SampleAttributesDS.txt",
+                        header = T,
+                        sep = "\t",
+                        stringsAsFactors = F)
+```
+
+Subset samples for further analysis:
+
+```{r}
+# Make the subsetting reproducible
+set.seed(127)
+
+gtex.annot.subset = gtex.annot %>%
+  # Select samples from the Freeze dataset
+  # (GTEx selected them for analysis)
+  filter(SMAFRZE == "RNASEQ") %>% 
+  # Remove duplicate samples
+  filter(!SMTSD %in% c("Brain - Cerebellar Hemisphere", 
+                       "Brain - Frontal Cortex (BA9)")) %>% 
+  # Remove "Cells - Cultured fibrolasts" and 
+  # "Cells - EBV-transformed lymphocytes," because they are cell cultures 
+  # and not primary tissues. Also, remove "Whole Blood" as it is a 
+  # very diverse "tissue"
+  filter(!SMTSD %in% c("Cells - Cultured fibroblasts",
+                       "Cells - EBV-transformed lymphocytes",
+                       "Whole Blood")) %>%
+  group_by(SMTSD) %>%
+  mutate(sample.number = length(SAMPID)) %>%
+  ungroup() %>%
+  # Remove tissues with a small number of samples
+  filter(sample.number >= min.num.samples) %>% 
+  # Select num.samples.to.select random samples for each tissue
+  group_by(SMTSD) %>%
+  slice_sample(n = num.samples.to.select) %>% 
+  ungroup()
+
+saveRDS(gtex.annot.subset,
+        "../../data/results/gtex8_processed/gtex_annot_subset.rds")
+
+tissue.names = unique(gtex.annot.subset$SMTSD)
+
+saveRDS(tissue.names,
+        "../../data/results/gtex8_processed/tissue_names.rds")
+```
+
+## Load gene and coding transcript IDs
+
+Load the ID tables of TFs and non-TFs:
+
+```{r}
+tf.ids = read.delim("../../data/ensembl99/ensembl99_tsl1_tsl2_tslNA_mane_tfs_ID_table.tsv",
+                    header = T,
+                    sep = "\t",
+                    stringsAsFactors = F)
+
+nontf.ids = read.delim("../../data/ensembl99/ensembl99_tsl1_tsl2_tslNA_mane_nontfs_ID_table.tsv",
+                        header = T,
+                        sep = "\t",
+                        stringsAsFactors = F)
+```
+
+## Form the table of isoform raw counts
+
+Load the isoform raw count table and subset it for the selected samples:
+
+```{r}
+# The table "../data/results/gtex8_processed/tfs_nontfs_selected_samples_raw_whole.tsv"
+# was obtained in the following way:
+  
+# start_time <- Sys.time()
+# 
+# prepend.zero = function(i) {
+#   return(ifelse(nchar(as.character(i)) == 1,
+#                 paste0("00", as.character(i)),
+#                 ifelse(nchar(as.character(i)) == 2,
+#                        paste0("0", as.character(i)),
+#                        as.character(i))))
+# }
+# 
+# # Generate the header subset
+# gtex.raw.header = read.table(file = "../data/gtex8/GTEx_Analysis_2017-06-05_v8_RSEMv1.3.0_transcript_expected_count.tsv",
+#                              nrows = 1,
+#                              header = F,
+#                              sep = "\t",
+#                              stringsAsFactors = F)
+# 
+# names(gtex.raw.header) = gtex.raw.header[1, ]
+# 
+# gtex.raw.header.to.output = gtex.raw.header[, names(gtex.raw.header) %in% c("gene_id",
+#                                                                             "transcript_id",
+#                                                                             gtex.annot.subset$SAMPID)]
+# 
+# # Write down the header for the subset table
+# write.table(gtex.raw.header.to.output,
+#             file = "../data/results/gtex8_processed/tfs_nontfs_selected_samples_raw_whole.tsv",
+#             col.names = F,
+#             quote = F,
+#             sep = "\t",
+#             row.names = F)
+# 
+# # Select samples from the table of isoform counts
+# for (i in 1:200) { # go through the chunks of the count file
+#   i.str = prepend.zero(i)
+# 
+#   cat("Part", i.str, "of 200...\n")
+# 
+#   # Read a chunk
+#   gtex.raw.part = read.table(file = paste0("../data/gtex8/GTEx_Analysis_2017-06-05_v8_RSEMv1.3.0_transcript_expected_count_chunks/chunk.",
+#                                            i.str),
+#                              header = F,
+#                              sep = "\t",
+#                              stringsAsFactors = F)
+# 
+#   # Exclude the header from the first chunk
+#   if (i == 1) {
+#     gtex.raw.part = gtex.raw.part[-1, ]
+#   }
+# 
+#   names(gtex.raw.part) = gtex.raw.header[1, ]
+# 
+#   # Choose only the samples from the annotation subset
+#   gtex.raw.part = gtex.raw.part[, names(gtex.raw.part) %in% c("gene_id",
+#                                                               "transcript_id",
+#                                                               gtex.annot.subset$SAMPID)]
+# 
+#   # Remove versions from gene and transcript IDs
+#   gtex.raw.part.to.output = gtex.raw.part %>%
+#     group_by(gene_id) %>%
+#     mutate(gene_id = unlist(strsplit(gene_id, "\\."))[1]) %>%
+#     ungroup() %>%
+#     group_by(transcript_id) %>%
+#     mutate(transcript_id = unlist(strsplit(transcript_id, "\\."))[1]) %>%
+#     ungroup()
+# 
+#   # Add the resulting part table to the whole resulting table
+#   write.table(gtex.raw.part.to.output,
+#               file = "../data/results/gtex8_processed/tfs_nontfs_selected_samples_raw_whole.tsv",
+#               append = T,
+#               col.names = F,
+#               quote = F,
+#               sep = "\t",
+#               row.names = F)
+# }
+# 
+# end_time <- Sys.time()
+# 
+# cat("Elapsed time:", end_time - start_time)
+
+# ~30 min
+```
+
+Load the table of raw counts for the selected samples:
+
+```{r}
+selected.table.whole = read.delim("../../data/results/gtex8_processed/tfs_nontfs_selected_samples_raw_whole.tsv",
+                                  header = T,
+                                  sep = "\t",
+                                  stringsAsFactors = F)
+
+# Hyphens in sample IDs became full stops
+```
+
+Check possible duplicate isoforms:
+
+```{r}
+cat("The number of duplicate isoform IDs:", 
+    length(selected.table.whole %>% pull(transcript_id)) - length(unique(selected.table.whole %>% pull(transcript_id))),
+    "\n")
+
+duplicated.isoforms = selected.table.whole$transcript_id[duplicated(selected.table.whole$transcript_id)]
+```
+
+Check genomic coordinates of these duplicated isoforms:
+
+```{r}
+ens99.gtf = import("../../data/ensembl99/Homo_sapiens.GRCh38.99.gtf")
+
+unique(as.character(seqnames(ens99.gtf[ens99.gtf$transcript_id %in% duplicated.isoforms])))
+
+rm(ens99.gtf)
+```
+
+Hence, these isoforms may be produced by genes in pseudoautosomal regions.
+
+Remove all duplicated isoforms:
+
+```{r}
+selected.table.whole %<>% filter(!transcript_id %in% duplicated.isoforms)
+```
+
+Save the final raw table:
+
+```{r}
+saveRDS(selected.table.whole,
+        "../../data/results/gtex8_processed/tfs_nontfs_selected_samples_raw_selected_for-deseq2.rds")
+```
+
+Remove variables that we do not need anymore to save memory:
+
+```{r}
+rm(duplicated.isoforms,
+   selected.table.whole,
+   i,
+   i.str,
+   gtex.raw.header,
+   gtex.raw.header.to.output,
+   gtex.raw.part,
+   gtex.raw.part.to.output,
+   start_time,
+   end_time)
+```
+
+## Normalise isoform counts across samples
+
+Do the DESeq2 cross-sample normalisation of the raw isoform counts.
+
+First, generate the table of conditions (sample-tissue correspondence):
+
+```{r}
+selected.table = readRDS("../../data/results/gtex8_processed/tfs_nontfs_selected_samples_raw_selected_for-deseq2.rds")
+
+gtex.annot.subset = readRDS("../../data/results/gtex8_processed/gtex_annot_subset.rds")
+
+cond.df = gtex.annot.subset %>%
+  dplyr::select(SAMPID, SMTSD) %>%
+  mutate(SAMPID = str_replace_all(SAMPID, fixed("-"), "."))
+
+selected.table = selected.table[, c("transcript_id",
+                                    "gene_id",
+                                    cond.df$SAMPID)]
+
+saveRDS(selected.table,
+        "../../data/results/gtex8_processed/tfs_nontfs_selected_samples_raw_selected_for-deseq2_final.rds")
+
+cond.df %<>% 
+  column_to_rownames(var = "SAMPID") %>%
+  mutate(SMTSD = factor(SMTSD, levels = unique(SMTSD)))
+
+saveRDS(cond.df,
+        "../../data/results/gtex8_processed/deseq2_cond_table.rds")
+```
+
+Secondly, normalise raw counts using this condition table:
+
+```{r}
+start_time <- Sys.time()
+
+selected.table = readRDS("../../data/results/gtex8_processed/tfs_nontfs_selected_samples_raw_selected_for-deseq2_final.rds")
+
+cond.df = readRDS("../../data/results/gtex8_processed/deseq2_cond_table.rds")
+
+selected.table.annot = selected.table %>%
+  dplyr::select(transcript_id,
+                gene_id)
+
+selected.table %<>% dplyr::select(-transcript_id,
+                                  -gene_id)
+
+selected.table = round(selected.table)
+
+dds = DESeq2::DESeqDataSetFromMatrix(countData = selected.table,
+                                     colData = cond.df,
+                                     design = ~SMTSD)
+
+dds = DESeq2::estimateSizeFactors(dds)
+
+saveRDS(dds,
+        "../../data/results/gtex8_processed/tfs_nontfs_selected_samples_raw_selected_dds.rds")
+
+selected.table.norm = DESeq2::counts(dds, normalized = T)
+
+selected.table.norm.annot = 
+  bind_cols(selected.table.annot,
+            selected.table.norm)
+
+saveRDS(selected.table.norm.annot,
+        "../../data/results/gtex8_processed/tfs_nontfs_selected_samples_raw_selected_norm_whole.rds")
+
+end_time <- Sys.time()
+
+cat("Elapsed time:", end_time - start_time)
+
+# ~6 min
+```
+
+Remove unnecessary variables to save memory:
+
+```{r}
+rm(dds,
+   cond.df,
+   selected.table,
+   selected.table.annot,
+   selected.table.norm,
+   selected.table.norm.annot)
+```
+
+## Calculate per-tissue DESeq2-normalised isoform expression
+
+Calculate the median DESeq2-normalised expression value for each isoform in each tissue:
+
+```{r}
+selected.table = readRDS("../../data/results/gtex8_processed/tfs_nontfs_selected_samples_raw_selected_norm_whole.rds")
+
+selected.table.annot = selected.table %>% 
+  dplyr::select(transcript_id,
+                gene_id)
+
+selected.table %<>% 
+  dplyr::select(-transcript_id,
+                -gene_id)
+
+selected.table.med = as.data.frame(lapply(unique(gtex.annot.subset$SMTSD),
+                                          function(x) {
+                                            x.samples = gtex.annot.subset %>%
+                                              filter(SMTSD == x) %>%
+                                              pull(SAMPID)
+                                            x.samples = str_replace_all(x.samples, "-", ".")
+                                            return(rowMedians(as.matrix(selected.table[, x.samples])))
+                                          }))
+
+tissue.names = unique(gtex.annot.subset$SMTSD)
+
+names(selected.table.med) = tissue.names
+
+saveRDS(bind_cols(selected.table.annot,
+                  selected.table.med),
+        "../data/results/gtex8_processed/tfs_nontfs_isoforms_deseq2-normalised_final_selected.rds")
+```
+
+## Calculate isoform raw expression counts per tissue
+
+Calculate the median raw expression counts per isoform per tissue:
+
+```{r}
+selected.table = readRDS("../data/results/gtex8_processed/tfs_nontfs_selected_samples_raw_selected_for-deseq2.rds")
+
+cond.df = readRDS("../data/results/gtex8_processed/deseq2_cond_table.rds")
+
+gtex.annot.subset = readRDS("../data/results/gtex8_processed/gtex_annot_subset.rds")
+
+selected.table = selected.table[, c("transcript_id",
+                                    "gene_id",
+                                    rownames(cond.df))]
+
+selected.table.annot = selected.table %>% 
+  dplyr::select(transcript_id,
+                gene_id)
+
+selected.table %<>% 
+  dplyr::select(-transcript_id,
+                -gene_id)
+
+selected.table.med = as.data.frame(lapply(unique(gtex.annot.subset$SMTSD),
+                                          function(x) {
+                                            x.samples = gtex.annot.subset %>%
+                                              filter(SMTSD == x) %>%
+                                              pull(SAMPID)
+                                            x.samples = str_replace_all(x.samples, "-", ".")
+                                            return(rowMedians(as.matrix(selected.table[, x.samples])))
+                                          }))
+
+tissue.names = unique(gtex.annot.subset$SMTSD)
+
+names(selected.table.med) = tissue.names
+
+saveRDS(bind_cols(selected.table.annot,
+                  selected.table.med),
+        "../data/results/gtex8_processed/tfs_nontfs_isoforms_raw_final_selected.rds")
+```
+
+## Form a list of low-confidence isoforms
+
+Form a list of isoforms whose median raw counts are very low in all tissues (to exclude these isoforms from further analysis as they may represent transcriptional noise or annotation errors):
+
+```{r}
+selected.table = readRDS("../../data/results/gtex8_processed/tfs_nontfs_isoforms_raw_final_selected.rds")
+
+gtex.annot.subset = readRDS("../../data/results/gtex8_processed/gtex_annot_subset.rds")
+
+tissue.names = unique(gtex.annot.subset$SMTSD)
+
+selected.table.med = selected.table %>%
+  dplyr::select(-transcript_id,
+                -gene_id)
+
+selected.table.annot = selected.table %>%
+  dplyr::select(transcript_id,
+                gene_id)
+
+selected.table.annot.noise = selected.table.annot[rowSums(selected.table.med <= max.noise.count) == length(tissue.names), ]
+
+noise.isoform.ids = selected.table.annot.noise$transcript_id
+
+saveRDS(noise.isoform.ids,
+        "../../data/results/noise_isoform_ids.rds")
+
+tf.isoform.ndbds = read.delim("../../data/results/base_dbd_expression_analysis_table.tsv")
+
+dbdneg.isoforms = tf.isoform.ndbds %>%
+  filter(n_dbd == 0) %>%
+  pull(ensembl_transcript_id)
+
+dbdpos.isoforms = tf.isoform.ndbds %>%
+  filter(n_dbd > 0) %>%
+  pull(ensembl_transcript_id)
+
+cat("The total number of noise isoforms (produced by TFs and non-TFs):", length(noise.isoform.ids), "\n")
+
+cat("Number of noise DBD+ isoforms:", length(noise.isoform.ids[noise.isoform.ids %in% dbdpos.isoforms]), "\n")
+
+cat("Number of noise DBD- isoforms:", length(noise.isoform.ids[noise.isoform.ids %in% dbdneg.isoforms]), "\n")
+```
+
+We need to exclude isoforms from the `noise.isoform.ids` list from further analysis.
+
+## Select expressed isoforms and genes
+
+Select expressed TF and non-TF isoforms and the corresponding genes:
+
+```{r}
+selected.table = readRDS("../../data/results/gtex8_processed/tfs_nontfs_isoforms_deseq2-normalised_final_selected.rds")
+
+noise.isoform.ids = readRDS("../../data/results/noise_isoform_ids.rds")
+
+selected.table %<>%
+  filter(!transcript_id %in% noise.isoform.ids)
+
+selected.table.med = selected.table %>%
+  dplyr::select(-transcript_id,
+                -gene_id)
+
+selected.table.annot = selected.table %>%
+  dplyr::select(transcript_id,
+                gene_id)
+
+selected.table.med.expr = selected.table.med[rowSums(selected.table.med >= min.norm.count) >= 1, ]
+
+selected.table.annot.expr = selected.table.annot[rowSums(selected.table.med >= min.norm.count) >= 1, ]
+
+selected.table.annot.expr = bind_cols(selected.table.annot.expr,
+                                      selected.table.med.expr) %>%
+  filter(!transcript_id %in% c("ENST00000444486", "ENST00000434737")) # Exclude fusion isoforms 
+
+saveRDS(selected.table.annot.expr,
+        "../../data/results/gtex8_processed/tfs_nontfs_selected_table_deseq2_selected_med_expr.rds")
+
+tf.nontf.isoforms.expr = selected.table.annot.expr$transcript_id
+
+tf.isoforms.expr = tf.nontf.isoforms.expr[tf.nontf.isoforms.expr %in% tf.ids$ensembl_transcript_id]
+
+nontf.isoforms.expr = tf.nontf.isoforms.expr[tf.nontf.isoforms.expr %in% nontf.ids$ensembl_transcript_id]
+
+tf.genes.expr = selected.table.annot.expr %>%
+  filter(transcript_id %in% tf.isoforms.expr) %>%
+  pull(gene_id) %>%
+  unique()
+
+nontf.genes.expr = selected.table.annot.expr %>%
+  filter(transcript_id %in% nontf.isoforms.expr) %>%
+  pull(gene_id) %>%
+  unique()
+
+cat("The number of expressed TF isoforms:     ", length(tf.isoforms.expr), "\n")
+
+cat("The number of expressed DBD+ isoforms:   ", length(tf.isoforms.expr[tf.isoforms.expr %in% dbdpos.isoforms]), "\n")
+
+cat("The number of expressed DBD- isoforms:   ", length(tf.isoforms.expr[tf.isoforms.expr %in% dbdneg.isoforms]), "\n")
+
+cat("The number of corresponding TF genes:    ", length(tf.genes.expr), "\n")
+
+cat("The number of expressed non-TF isoforms: ", length(nontf.isoforms.expr), "\n")
+
+cat("The number of corresponding non-TF genes:", length(nontf.genes.expr), "\n")
+
+selected.table.med.expr.tfs = selected.table.annot.expr %>%
+  filter(transcript_id %in% tf.isoforms.expr)
+
+selected.table.med.expr.nontfs = selected.table.annot.expr %>%
+  filter(transcript_id %in% nontf.isoforms.expr)
+  
+saveRDS(selected.table.med.expr.tfs,
+        "../../data/results/gtex8_processed/tfs_selected_table_deseq2_selected_med_expr.rds")
+
+saveRDS(selected.table.med.expr.nontfs,
+        "../../data/results/gtex8_processed/nontfs_selected_table_deseq2_selected_med_expr.rds")
+
+saveRDS(tf.isoforms.expr,
+        "../../data/results/gtex8_processed/tf_isoforms_expr_ids.rds")
+
+saveRDS(nontf.isoforms.expr,
+        "../../data/results/gtex8_processed/nontf_isoforms_expr_ids.rds")
+
+saveRDS(tf.genes.expr,
+        "../../data/results/gtex8_processed/tf_genes_expr_ids.rds")
+
+saveRDS(nontf.genes.expr,
+        "../../data/results/gtex8_processed/nontf_genes_expr_ids.rds")
+```
+
+Remove variables that we do not need anymore to save memory:
+
+```{r}
+rm(gtex.annot,
+   selected.table,
+   selected.table.annot,
+   selected.table.annot.expr,
+   selected.table.med,
+   selected.table.med.expr,
+   selected.table.med.expr.tfs,
+   selected.table.med.expr.nontfs,
+   tf.ids,
+   nontf.ids,
+   duplicated.isoforms,
+   tf.isoforms.expr,
+   nontf.isoforms.expr,
+   tf.genes.expr,
+   nontf.genes.expr,
+   tf.nontf.genes.expr,
+   tf.nontf.isoforms.expr,
+   tissue.names,
+   raw.tissue.names)
+```
+
+## Select expressed TF isoforms in the TPM table
+
+In the same way as DESeq2-normalised counts, select isoform TPMs (these TPMs are calculated by the GTEx Consortium and hence do not correspond to the DESeq2-normalised counts above; however, calculating TPMs from scratch based on the DESeq2-normalised counts does not make sense, because DESeq2-normalised counts are not comparable between different isoforms within the same sample, while we would like to do such comparison with TPMs based on these counts):
+
+```{r}
+gtex.annot.subset = readRDS("../../data/results/gtex8_processed/gtex_annot_subset.rds")
+
+# The table "../../data/results/gtex8_processed/tfs_nontfs_selected_samples_tpm_whole.tsv"
+# was obtained in the following way:
+  
+start_time <- Sys.time()
+
+prepend.zero = function(i) {
+  return(ifelse(nchar(as.character(i)) == 1,
+                paste0("00", as.character(i)),
+                ifelse(nchar(as.character(i)) == 2,
+                       paste0("0", as.character(i)),
+                       as.character(i))))
+}
+
+# Generate the header subset
+gtex.raw.header = read.table(file = "../../data/gtex8/GTEx_Analysis_2017-06-05_v8_RSEMv1.3.0_transcript_tpm.tsv",
+                             nrows = 1,
+                             header = F,
+                             sep = "\t",
+                             stringsAsFactors = F)
+
+names(gtex.raw.header) = gtex.raw.header[1, ]
+
+gtex.raw.header.to.output = gtex.raw.header[, names(gtex.raw.header) %in% c("gene_id",
+                                                                            "transcript_id",
+                                                                            gtex.annot.subset$SAMPID)]
+
+# Write down the header for the subset table
+write.table(gtex.raw.header.to.output,
+            file = "../../data/results/gtex8_processed/tfs_nontfs_selected_samples_tpm_whole.tsv",
+            col.names = F,
+            quote = F,
+            sep = "\t",
+            row.names = F)
+
+# Select samples from the table of isoform TPMs
+for (i in 1:200) { # go through the chunks of the count file
+  i.str = prepend.zero(i)
+
+  cat("Part", i.str, "of 200...\n")
+
+  # Read a chunk
+  gtex.raw.part = read.table(file = paste0("../../data/gtex8/GTEx_Analysis_2017-06-05_v8_RSEMv1.3.0_transcript_tpm_chunks/chunk.",
+                                           i.str),
+                             header = F,
+                             sep = "\t",
+                             stringsAsFactors = F)
+
+  # Exclude the header from the first chunk
+  if (i == 1) {
+    gtex.raw.part = gtex.raw.part[-1, ]
+  }
+
+  names(gtex.raw.part) = gtex.raw.header[1, ]
+
+  # Choose only the samples from the annotation subset
+  gtex.raw.part = gtex.raw.part[, names(gtex.raw.part) %in% c("gene_id",
+                                                              "transcript_id",
+                                                              gtex.annot.subset$SAMPID)]
+
+  # Remove versions from gene and transcript IDs
+  gtex.raw.part.to.output = gtex.raw.part %>%
+    group_by(gene_id) %>%
+    mutate(gene_id = unlist(strsplit(gene_id, "\\."))[1]) %>%
+    ungroup() %>%
+    group_by(transcript_id) %>%
+    mutate(transcript_id = unlist(strsplit(transcript_id, "\\."))[1]) %>%
+    ungroup()
+
+  # Add the resulting part table to the whole resulting table
+  write.table(gtex.raw.part.to.output,
+              file = "../../data/results/gtex8_processed/tfs_nontfs_selected_samples_tpm_whole.tsv",
+              append = T,
+              col.names = F,
+              quote = F,
+              sep = "\t",
+              row.names = F)
+}
+
+end_time <- Sys.time()
+
+cat("Elapsed time:", end_time - start_time)
+
+# ~30 min (1 hour on a laptop)
+```
+
+Select expressed TF isoforms:
+
+```{r}
+gtex.tpms = read.delim("../../data/results/gtex8_processed/tfs_nontfs_selected_samples_tpm_whole.tsv")
+
+tf.isoforms.expr = readRDS("../../data/results/gtex8_processed/tf_isoforms_expr_ids.rds")
+
+gtex.tpms.expressed.tf.isoforms = gtex.tpms %>%
+  filter(transcript_id %in% tf.isoforms.expr)
+
+saveRDS(gtex.tpms.expressed.tf.isoforms,
+        "../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole.rds")
+```
+
+Check possible duplicate isoforms:
+
+```{r}
+gtex.tpms.expressed.tf.isoforms = readRDS("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole.rds")
+
+cat("The number of duplicate isoform IDs:", 
+    length(gtex.tpms.expressed.tf.isoforms %>% pull(transcript_id)) - length(unique(gtex.tpms.expressed.tf.isoforms %>% pull(transcript_id))),
+    "\n")
+
+duplicated.isoforms = gtex.tpms.expressed.tf.isoforms$transcript_id[duplicated(gtex.tpms.expressed.tf.isoforms$transcript_id)]
+```
+
+No duplicates, perfect.
+
+Clean up objects:
+
+```{r}
+rm(gtex.tpms.expressed.tf.isoforms,
+   duplicated.isoforms)
+```
+
+## Calculate per-tissue isoform expression in TPMs
+
+Calculate the median TPM expression value for each TF isoform in each tissue:
+
+```{r}
+selected.table = readRDS("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole.rds")
+
+gtex.annot.subset = readRDS("../../data/results/gtex8_processed/gtex_annot_subset.rds")
+
+selected.table.annot = selected.table %>% 
+  dplyr::select(transcript_id,
+                gene_id)
+
+selected.table %<>% 
+  dplyr::select(-transcript_id,
+                -gene_id)
+
+selected.table.med = as.data.frame(lapply(unique(gtex.annot.subset$SMTSD),
+                                          function(x) {
+                                            x.samples = gtex.annot.subset %>%
+                                              filter(SMTSD == x) %>%
+                                              pull(SAMPID)
+                                            x.samples = str_replace_all(x.samples, "-", ".")
+                                            return(rowMedians(as.matrix(selected.table[, x.samples])))
+                                          }))
+
+tissue.names = unique(gtex.annot.subset$SMTSD)
+
+names(selected.table.med) = tissue.names
+
+selected.table.final = bind_cols(selected.table.annot,
+                                 selected.table.med) %>%
+  filter(!transcript_id %in% c("ENST00000444486", "ENST00000434737")) # Exclude fusion isoforms
+
+saveRDS(selected.table.final,
+        "../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue.rds")
+```

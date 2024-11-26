@@ -1,0 +1,1371 @@
+---
+title: "Functional annotation of switches"
+format: html
+editor: source
+---
+
+## Load libraries
+
+```{r}
+library(dplyr)
+library(magrittr)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+```
+
+## Define constants
+
+```{r}
+diff.cutoff = 0.2 # The minimum reciprocal difference between the expression levels of two major isoforms to call a switch between them.
+                  # This is a fraction of the expression level of the higher-expressed isoform.
+```
+
+## Predict functional outcomes of major isoform switches
+
+Prepare the data:
+
+```{r, include=T}
+domain_functional_classification = read.delim("../../data/results/Other_domains_manually_curated_filled_generalized.tsv")
+
+ens99_pep = read.delim("../../data/ensembl99/Homo_sapiens.GRCh38.pep.all.99.tsv", 
+                       header = F) %>%
+  dplyr::rename("protein_accession" = "V1",
+                "protein_sequence" = "V2") %>%
+  mutate(protein_sequence = as.character(protein_sequence))
+
+tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl = read.delim("../../data/results/tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl.tsv")
+
+canonical_dbd_iprs = tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl %>%
+  filter(!is.na(represents_family)) %>%
+  dplyr::select(ipr_accession, ipr_description, represents_family) %>%
+  arrange(represents_family, ipr_accession) %>%
+  distinct() %>%
+  pull(ipr_accession)
+
+saveRDS(canonical_dbd_iprs,
+        file = "../../data/results/canonical_dbd_iprs.rds")
+
+dbd_seq_table = tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl %>%
+  filter(!DBD %in% c("Unknown", "Excluded")) %>%
+  filter(ipr_accession %in% canonical_dbd_iprs) %>%
+  dplyr::select(ensembl_gene_id, 
+                ensembl_transcript_id, 
+                protein_accession, 
+                ipr_accession, 
+                ipr_description, 
+                db, 
+                domain_accession, 
+                start, 
+                stop) %>%
+  left_join(ens99_pep, by = c("protein_accession" = "protein_accession")) %>%
+  mutate(dbd_sequence = stringr::str_sub(protein_sequence, start = start, end = stop)) %>%
+  arrange(ensembl_gene_id, ensembl_transcript_id, as.numeric(start), as.numeric(stop))
+
+saveRDS(dbd_seq_table,
+        file = "../../data/results/dbd_seq_table.rds")
+
+nondbd_seq_table = tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl %>%
+  filter(!DBD %in% c("Unknown", "Excluded")) %>%
+  filter(!ipr_accession %in% canonical_dbd_iprs) %>%
+  dplyr::select(ensembl_gene_id, 
+                ensembl_transcript_id, 
+                protein_accession, 
+                ipr_accession, 
+                ipr_description, 
+                db, 
+                domain_accession, 
+                start, 
+                stop) %>%
+  left_join(ens99_pep, by = c("protein_accession" = "protein_accession")) %>%
+  mutate(nondbd_sequence = stringr::str_sub(protein_sequence, start = start, end = stop)) %>%
+  arrange(ensembl_gene_id, ensembl_transcript_id, as.numeric(start), as.numeric(stop))
+
+saveRDS(nondbd_seq_table,
+        file = "../../data/results/nondbd_seq_table.rds")
+```
+
+Generate a per-isoform table with the lists of contained domains and their functions:
+
+```{r}
+canonical_dbd_iprs = readRDS("../../data/results/canonical_dbd_iprs.rds")
+
+dbd_seq_table = readRDS("../../data/results/dbd_seq_table.rds")
+
+tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl = read.delim("../../data/results/tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl.tsv")
+
+per.isof.domain.table = tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl %>%
+              dplyr::select(ensembl_gene_id, protein_accession, ensembl_transcript_id,  
+                            ipr_accession, ipr_description, 
+                            start, stop) %>%
+              left_join(domain_functional_classification,
+                        by = c("ipr_accession" = "ipr_accession",
+                               "ipr_description" = "ipr_description")) %>%
+              mutate(Molecular_mechanism = ifelse(is.na(Molecular_mechanism) & (ipr_accession %in% canonical_dbd_iprs),
+                                                  "Canonical DBD",
+                                                  Molecular_mechanism)) %>%
+              mutate(Molecular_function = ifelse(is.na(Molecular_function) & (ipr_accession %in% canonical_dbd_iprs),
+                                                 "Canonical DBD",
+                                                 Molecular_function)) %>%
+              mutate(Molecular_function_general = ifelse(is.na(Molecular_function_general) & (ipr_accession %in% canonical_dbd_iprs),
+                                                         "Canonical DBD",
+                                                         Molecular_function_general)) %>%
+              left_join(dbd_seq_table %>%
+                          dplyr::select(ensembl_gene_id, ensembl_transcript_id,
+                                        ipr_accession, ipr_description,
+                                        start, stop,
+                                        dbd_sequence),
+                        by = c("ensembl_gene_id" = "ensembl_gene_id", 
+                               "ensembl_transcript_id" = "ensembl_transcript_id",
+                               "ipr_accession" = "ipr_accession", 
+                               "ipr_description" = "ipr_description",
+                               "start" = "start", 
+                               "stop" = "stop")) %>%
+              left_join(nondbd_seq_table %>%
+                          dplyr::select(ensembl_gene_id, ensembl_transcript_id,
+                                        ipr_accession, ipr_description,
+                                        start, stop,
+                                        nondbd_sequence),
+                        by = c("ensembl_gene_id" = "ensembl_gene_id", 
+                               "ensembl_transcript_id" = "ensembl_transcript_id",
+                               "ipr_accession" = "ipr_accession", 
+                               "ipr_description" = "ipr_description",
+                               "start" = "start", 
+                               "stop" = "stop")) %>%              
+              group_by(ensembl_gene_id, ensembl_transcript_id) %>%
+              arrange(ipr_accession, start, stop, Molecular_function_general) %>%
+              ungroup() %>%
+              group_by(ensembl_gene_id, ensembl_transcript_id) %>%
+              mutate(ipr_accession_list = paste0(ipr_accession,
+                                                 collapse = "|"),
+                     ipr_description_list = paste0(ipr_description,
+                                                   collapse = "|"),
+                     mol_mechanism_list = paste0(Molecular_mechanism,
+                                                 collapse = "|"),
+                     mol_function_general_list = paste0(Molecular_function_general,
+                                                        collapse = "|"),
+                     dbd_seq_list = paste0(dbd_sequence[!is.na(dbd_sequence)], 
+                                           collapse = "|"),
+                     nondbd_seq_list = paste0(nondbd_sequence[!is.na(nondbd_sequence)], 
+                                              collapse = "|")) %>%
+              ungroup() %>%
+              dplyr::select(-ipr_accession, -ipr_description, -start, -stop,
+                            -Molecular_mechanism, -Molecular_function, -Molecular_function_general,
+                            -Comment, -dbd_sequence, -nondbd_sequence) %>%
+              distinct()
+
+saveRDS(per.isof.domain.table,
+        file = "../../data/results/per_isof_domain_table.rds")
+```
+
+Generate the master table of switches between major TF isoforms:
+
+```{r}
+ens99_pep = read.delim("../../data/ensembl99/Homo_sapiens.GRCh38.pep.all.99.tsv", 
+                       header = F) %>%
+  dplyr::rename("protein_accession" = "V1",
+                "protein_sequence" = "V2") %>%
+  mutate(protein_sequence = as.character(protein_sequence))
+
+switch.table.annot = readRDS(paste0("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_switches_annot_cutoff_", diff.cutoff,".rds"))
+
+per.isof.domain.table = readRDS("../../data/results/per_isof_domain_table.rds")
+  
+cluster.annot.df.complete = read.delim("../../data/results/gene_cluster_annotation_method-complete.tsv")
+
+cluster.annot.df.wardd2 = read.delim("../../data/results/gene_cluster_annotation_method-wardd2.tsv")
+  
+isoform.switch.master.table = switch.table.annot %>%
+  dplyr::select(-switch_detected) %>%
+  dplyr::rename("ensembl_transcript_id1" = "isof_id1",
+                "ensembl_transcript_id2" = "isof_id2",
+                "tissue_list1" = "isof1_tissues",
+                "tissue_list2" = "isof2_tissues",
+                "n_dbd1" = "n_dbd_id1",
+                "n_dbd2" = "n_dbd_id2") %>%
+  left_join(per.isof.domain.table,
+            by = c("ensembl_gene_id" = "ensembl_gene_id",
+                   "ensembl_transcript_id1" = "ensembl_transcript_id")) %>%
+  dplyr::rename("ipr_accession_list1" = "ipr_accession_list",
+                "ipr_description_list1" = "ipr_description_list",
+                "mol_mechanism_list1" = "mol_mechanism_list",
+                "mol_function_general_list1" = "mol_function_general_list",
+                "dbd_seq_list1" = "dbd_seq_list",
+                "nondbd_seq_list1" = "nondbd_seq_list",
+                "protein_accession1" = "protein_accession") %>%
+  left_join(per.isof.domain.table,
+            by = c("ensembl_gene_id" = "ensembl_gene_id",
+                   "ensembl_transcript_id2" = "ensembl_transcript_id")) %>%
+  dplyr::rename("ipr_accession_list2" = "ipr_accession_list",
+                "ipr_description_list2" = "ipr_description_list",
+                "mol_mechanism_list2" = "mol_mechanism_list",
+                "mol_function_general_list2" = "mol_function_general_list",
+                "dbd_seq_list2" = "dbd_seq_list",
+                "nondbd_seq_list2" = "nondbd_seq_list",
+                "protein_accession2" = "protein_accession") %>%
+  left_join(ens99_pep %>%
+              dplyr::select(protein_accession, protein_sequence), 
+            by = c("protein_accession1" = "protein_accession")) %>%
+  dplyr::rename("protein_sequence1" = "protein_sequence") %>%
+  left_join(ens99_pep %>%
+              dplyr::select(protein_accession, protein_sequence), 
+            by = c("protein_accession2" = "protein_accession")) %>%
+  dplyr::rename("protein_sequence2" = "protein_sequence") %>%
+  left_join(cluster.annot.df.complete %>%
+              rowwise() %>%
+              mutate(ensembl_transcript_id1 = unlist(stringr::str_split(switch_id, fixed("_")))[3]) %>%
+              mutate(ensembl_transcript_id2 = unlist(stringr::str_split(switch_id, fixed("_")))[4]) %>%
+              ungroup(),
+            by = c("ensembl_gene_id" = "ensembl_gene_id",
+                   "humantfs_gene_name" = "humantfs_gene_name",
+                   "ensembl_transcript_id1" = "ensembl_transcript_id1",
+                   "ensembl_transcript_id2" = "ensembl_transcript_id2")) %>% 
+  dplyr::rename("cluster_number_complete" = "cluster_number") %>%
+  left_join(cluster.annot.df.wardd2 %>%
+              rowwise() %>%
+              mutate(ensembl_transcript_id1 = unlist(stringr::str_split(switch_id, fixed("_")))[3]) %>%
+              mutate(ensembl_transcript_id2 = unlist(stringr::str_split(switch_id, fixed("_")))[4]) %>%
+              ungroup(),
+            by = c("ensembl_gene_id" = "ensembl_gene_id",
+                   "humantfs_gene_name" = "humantfs_gene_name",
+                   "ensembl_transcript_id1" = "ensembl_transcript_id1",
+                   "ensembl_transcript_id2" = "ensembl_transcript_id2")) %>% 
+  dplyr::rename("cluster_number_wardd2" = "cluster_number") %>%
+  dplyr::select(ensembl_gene_id,
+                humantfs_gene_name,
+                tf_family,
+                cluster_number_complete,
+                cluster_number_wardd2,
+                ensembl_transcript_id1,
+                ensembl_transcript_id2,
+                protein_accession1,
+                protein_accession2,
+                n_dbd1,
+                n_dbd2,
+                tissue_list1,
+                tissue_list2,
+                ipr_accession_list1,
+                ipr_accession_list2,
+                ipr_description_list1,
+                ipr_description_list2,
+                mol_mechanism_list1,
+                mol_mechanism_list2,
+                mol_function_general_list1,
+                mol_function_general_list2,
+                dbd_seq_list1,
+                dbd_seq_list2,
+                nondbd_seq_list1,
+                nondbd_seq_list2,
+                protein_sequence1,
+                protein_sequence2) %>%
+  arrange(ensembl_gene_id,
+          ensembl_transcript_id1,
+          ensembl_transcript_id2)
+
+saveRDS(isoform.switch.master.table,
+        file = "../../data/results/isoform_switch_master_table.rds")
+```
+
+Annotate the master switch table with switch properties:
+
+```{r, include=T}
+add_element_counts = function(v) {
+  return(as.data.frame(table(v)) %>% 
+           rowwise() %>% 
+           mutate(with_count = paste0(v, " (", Freq, ")")) %>%
+           pull(with_count))
+}
+
+normalize_switches = function(switched_domains) {
+  switch_dict = c()
+  switched_domains_norm = c()
+  
+  for (s in switched_domains) {
+    if (s %in% switch_dict) {
+      switched_domains_norm = c(switched_domains_norm, s)
+    } else {
+      s.rev = paste0(unlist(stringr::str_split(s, fixed(" | ")))[2], " | ", unlist(stringr::str_split(s, fixed(" | ")))[1])
+      if (s.rev %in% switch_dict) {
+        switched_domains_norm = c(switched_domains_norm, s.rev)
+      } else {
+        switch_dict = c(switch_dict, s)
+        switched_domains_norm = c(switched_domains_norm, s)
+      }
+    }
+  }
+  
+  return(switched_domains_norm)
+}
+
+find_changed_nondbds = function(switch.df) {
+  mol.function.general.list = unlist(stringr::str_split(switch.df[1, "mol_function_general_list1"], fixed("|")))
+  nondbd.seq.list1 = unlist(stringr::str_split(switch.df[1, "nondbd_seq_list1"], fixed("|")))
+  nondbd.seq.list2 = unlist(stringr::str_split(switch.df[1, "nondbd_seq_list2"], fixed("|")))
+  
+  i = 1
+  j = 1
+  i.max = length(mol.function.general.list)
+  result.left.side = ""
+  result.right.side = ""
+  while (i <= i.max) {
+    if (mol.function.general.list[i] != "Canonical DBD") {
+      if (nondbd.seq.list1[j] != nondbd.seq.list2[j]) {
+        result.left.side = paste0(result.left.side, 
+                                  ifelse(result.left.side == "", "", "; "),
+                                  mol.function.general.list[i], 
+                                  " 1")
+        result.right.side = paste0(result.right.side, 
+                                   ifelse(result.right.side == "", "", "; "),
+                                   mol.function.general.list[i], 
+                                   " 2")
+      }
+      j = j + 1
+    }
+    i = i + 1
+  }
+  
+  result.whole = paste0(result.left.side, " | ", result.right.side)
+  return(result.whole)
+}
+
+summarise_switch = function(clean.switch) {
+  if (clean.switch == "|") {
+    return(clean.switch)
+  }
+  
+  left.side = unlist(stringr::str_split(clean.switch, fixed(" | ")))[1]
+  right.side = unlist(stringr::str_split(clean.switch, fixed(" | ")))[2]
+  if (left.side == "") {
+    summarised.switch = paste0(right.side, " | ")
+  } else {
+    summarised.switch = clean.switch
+  }
+  
+  return(summarised.switch)
+}
+
+isoform.switch.master.table.annot = isoform.switch.master.table %>%
+  mutate(switch_type = ifelse(stringr::str_detect(mol_function_general_list1, "DBD") & 
+                              stringr::str_detect(mol_function_general_list2, "DBD"),
+                              "+/+",
+                              ifelse(!stringr::str_detect(mol_function_general_list1, "DBD") & 
+                                     !stringr::str_detect(mol_function_general_list2, "DBD"),
+                                     "-/-",
+                                     "+/-"))) %>%
+  mutate(protein_seq_changed = (protein_sequence1 != protein_sequence2)) %>%
+  mutate(dbd_seq_changed = (dbd_seq_list1 != dbd_seq_list2)) %>%
+  mutate(nondbd_seq_changed = (nondbd_seq_list1 != nondbd_seq_list2)) %>%
+  mutate(mol_mechanism_list1 = ifelse(mol_mechanism_list1 == "NA", NA, mol_mechanism_list1),
+         mol_mechanism_list2 = ifelse(mol_mechanism_list2 == "NA", NA, mol_mechanism_list2),
+         mol_function_general_list1 = ifelse(mol_function_general_list1 == "NA", NA, mol_function_general_list1),
+         mol_function_general_list2 = ifelse(mol_function_general_list2 == "NA", NA, mol_function_general_list2)) %>%
+  rowwise() %>%
+  mutate(switched_domains = paste0(c(paste0(add_element_counts(unlist(stringr::str_split(mol_function_general_list1, fixed("|")))),
+                                            collapse = "; "),
+                                     paste0(add_element_counts(unlist(stringr::str_split(mol_function_general_list2, fixed("|")))),
+                                            collapse = "; ")),
+                                   collapse = " | ")) %>%
+  bind_cols(data.frame(switched_domains_norm = normalize_switches(.$switched_domains))) %>%
+  mutate(switched_domains_norm_clean = ifelse(unlist(stringr::str_split(switched_domains_norm, fixed(" | ")))[1] ==
+                                              unlist(stringr::str_split(switched_domains_norm, fixed(" | ")))[2],
+                                              "|",
+                                              switched_domains_norm)) %>%
+  mutate(switched_domains_norm_clean = ifelse((switched_domains_norm_clean == "|") & dbd_seq_changed,
+                                              "Canonical DBD(s) 1 | Canonical DBD(s) 2",
+                                              switched_domains_norm_clean)) %>%
+  group_by(ensembl_gene_id, ensembl_transcript_id1, ensembl_transcript_id2,
+           ipr_accession_list1, ipr_accession_list2,
+           protein_sequence1, protein_sequence2) %>%
+  do(mutate(., nondbd_seq_switch = ifelse((switched_domains_norm_clean == "|") & nondbd_seq_changed,
+                                            find_changed_nondbds(.),
+                                            ""))) %>%
+  ungroup() %>% 
+  mutate(switched_domains_norm_clean_seq = ifelse((switched_domains_norm_clean == "|") & (nondbd_seq_switch != ""),
+                                                  nondbd_seq_switch,
+                                                  switched_domains_norm_clean)) %>%
+  mutate(switched_domains_norm_clean_seq = ifelse(switched_domains_norm_clean_seq == "|", 
+                                                  switched_domains_norm, 
+                                                  switched_domains_norm_clean_seq)) %>%
+  group_by(switched_domains_norm_clean_seq) %>%
+  do(mutate(., summarised_switch = summarise_switch(unique(.$switched_domains_norm_clean_seq)))) %>%
+  ungroup()
+```
+
+Print out switch stats:
+
+```{r, include=T}
+cat("Number of TFs that switch major isoforms: ", 
+    isoform.switch.master.table.annot %>% 
+      pull(ensembl_gene_id) %>% 
+      unique() %>% 
+      length(),
+    "\n")
+
+cat("Total number of switches: ",
+    nrow(isoform.switch.master.table.annot),
+    "\n")
+
+cat("Number of DBD+ to DBD+ switches: ",
+    isoform.switch.master.table.annot %>%
+      filter(switch_type == "+/+") %>%
+      nrow(),
+    "\n")
+
+cat("Number of DBD+ to DBD- switches: ",
+    isoform.switch.master.table.annot %>%
+      filter(switch_type == "+/-") %>%
+      nrow(),
+    "\n")
+
+cat("Number of DBD- to DBD- switches: ",
+    isoform.switch.master.table.annot %>%
+      filter(switch_type == "-/-") %>%
+      nrow(),
+    "\n")
+
+cat("Number of switches (among all +/+ and -/-) that do not change domains: ",
+    isoform.switch.master.table.annot %>%
+      filter(!dbd_seq_changed & !nondbd_seq_changed) %>%
+      nrow(),
+    "\n")
+
+cat("Number of switches (among all +/+ and -/-) not changing protein sequence: ",
+    isoform.switch.master.table.annot %>%
+      filter(!protein_seq_changed) %>%
+      nrow(),
+    "\n")
+
+cat("Number of +/+ switches that do not change domains: ",
+    isoform.switch.master.table.annot %>%
+      filter(switch_type == "+/+") %>%
+      filter(!dbd_seq_changed & !nondbd_seq_changed) %>%
+      nrow(),
+    "\n")
+
+cat("Number of +/+ switches that do not change protein sequence: ",
+    isoform.switch.master.table.annot %>%
+      filter(switch_type == "+/+") %>%
+      filter(!protein_seq_changed) %>%
+      nrow(),
+    "\n")
+```
+
+Hence, the majority of switches occur between two DBD+ major isoforms. Interestingly, 245 switches (which comprise 62% of all +/+ switches) do not change domains; 245 - 91 = 154 of these switches (39% of all +/+ switches) change the protein sequence between domains (hence, potentially changing functional IDRs) and the other 91 switches change only UTRs (in this way, potentially changing mRNA stability, localisation or translational efficiency).
+
+Rate the most common switch types (by changing domains):
+
+```{r, include=T}
+top.switch.functional.classes = isoform.switch.master.table.annot %>%
+  dplyr::count(summarised_switch) %>%
+  arrange(desc(n)) %>%
+  head(10)
+
+top.switch.functional.classes
+
+saveRDS(top.switch.functional.classes,
+        file = "../../data/results/top_switch_functional_classes.rds")
+```
+
+In this rating, separate C2H2 ZF switches which total to
+
+```{r}
+isoform.switch.master.table.annot %>%
+  filter(tf_family == "C2H2 ZF") %>%
+  nrow()
+```
+
+from switches produced by other TF genes; these switches total to
+
+```{r}
+isoform.switch.master.table.annot %>%
+  filter(tf_family != "C2H2 ZF") %>%
+  nrow()
+```
+
+The rating for C2H2 ZF switches:
+
+```{r}
+top.switch.functional.classes.c2h2zf = isoform.switch.master.table.annot %>%
+  filter(tf_family == "C2H2 ZF") %>%
+  dplyr::count(summarised_switch) %>%
+  arrange(desc(n)) %>%
+  head(10)
+
+top.switch.functional.classes.c2h2zf
+
+saveRDS(top.switch.functional.classes.c2h2zf,
+        file = "../../data/results/top_switch_functional_classes_c2h2zf.rds")
+```
+
+The rating for non-C2H2 ZF switches:
+
+```{r}
+top.switch.functional.classes.other = isoform.switch.master.table.annot %>%
+  filter(tf_family != "C2H2 ZF") %>%
+  dplyr::count(summarised_switch) %>%
+  arrange(desc(n)) %>%
+  head(10)
+
+top.switch.functional.classes.other
+
+saveRDS(top.switch.functional.classes.other,
+        file = "../../data/results/top_switch_functional_classes_other.rds")
+```
+
+Generate a table of switches for manual functional classification:
+
+```{r, include=T}
+reformat_domain_list = function(domain.list) {
+  return(paste0(unique(sort(unlist(stringr::str_split(unlist(stringr::str_split(domain.list, 
+                                                                                fixed("|"))),
+                                                      fixed("; "))))), 
+                collapse = "; "))
+}
+
+# Exclude the later usage of the filled table to build a refreshed raw table
+
+dbdminus.domain.table.per_function.filled = read.delim("../../data/results/dbdminus_domain_table_per_function_filled.tsv",
+                                                       header = T,
+                                                       sep = "\t")
+
+switch.types.table = isoform.switch.master.table.annot %>%
+  dplyr::select(switch_type,
+                mol_function_general_list1,
+                mol_function_general_list2,
+                dbd_seq_changed,
+                nondbd_seq_changed,
+                protein_seq_changed,
+                summarised_switch) %>%
+  rowwise() %>%
+  mutate(., mol_function_general_list1 = reformat_domain_list(mol_function_general_list1)) %>%
+  mutate(., mol_function_general_list2 = reformat_domain_list(mol_function_general_list2)) %>%
+  left_join(dbdminus.domain.table.per_function.filled %>%
+              dplyr::rename("general_function_list1" = "general_function_list",
+                            "isoform_function1" = "isoform_function") %>%
+              dplyr::select(-prediction_comment),
+            by = c("mol_function_general_list1" = "general_function_list1")) %>%
+  left_join(dbdminus.domain.table.per_function.filled %>%
+              dplyr::rename("general_function_list2" = "general_function_list",
+                            "isoform_function2" = "isoform_function") %>%
+              dplyr::select(-prediction_comment),
+            by = c("mol_function_general_list2" = "general_function_list2")) %>%
+  mutate(dbdminus_isoform_function = ifelse(!is.na(isoform_function1) & !is.na(isoform_function2),
+                                            paste0(c(isoform_function1, isoform_function2), collapse = " | "),
+                                            ifelse(is.na(isoform_function1),
+                                                   isoform_function2,
+                                                   isoform_function1))) %>%
+  dplyr::select(-mol_function_general_list1,
+                -mol_function_general_list2,
+                -isoform_function1,
+                -isoform_function2) %>%
+  arrange(switch_type,
+          protein_seq_changed,
+          dbd_seq_changed,
+          nondbd_seq_changed,
+          summarised_switch) %>%
+  distinct()
+
+write.table(switch.types.table,
+            file = "../../data/results/switch_types_table_raw.tsv",
+            quote = F,
+            row.names = F,
+            sep = "\t")
+```
+
+To fill out this table, I copied it, named the copy `../../data/results/switch_types_table_filled.tsv` and filled it out.
+
+Rate the most common switch functions per switch type:
+
+```{r, include=T}
+switch.fraction.cutoff = 0.05
+
+switch.types.table.filled = read.delim("../../data/results/switch_types_table_filled.tsv",
+                                       header = T,
+                                       sep = "\t",
+                                       stringsAsFactors = F)
+
+isoform.switch.master.table.annot.with_functions = isoform.switch.master.table.annot %>%
+    left_join(switch.types.table.filled %>%
+                dplyr::select(-dbdminus_isoform_function) %>%
+                distinct(),
+            by = c("switch_type" = "switch_type",
+                   "dbd_seq_changed" = "dbd_seq_changed",
+                   "nondbd_seq_changed" = "nondbd_seq_changed",
+                   "protein_seq_changed" = "protein_seq_changed",
+                   "summarised_switch" = "summarised_switch")) %>%
+  mutate(general_functional_consequence = stringr::str_trim(general_functional_consequence, side = "both")) %>%
+  mutate(general_functional_consequence = stringr::str_replace(general_functional_consequence,
+                                                               fixed("+/- Catalytic activity"),
+                                                               "Catalytic activity presence/absence")) %>%
+  mutate(general_functional_consequence = stringr::str_replace(general_functional_consequence,
+                                                               fixed("+/- Nucleic acid binding and change in DNA binding"),
+                                                               "Nucleic acid binding presence/absence and change in DNA binding")) %>%
+  mutate(general_functional_consequence = stringr::str_replace(general_functional_consequence,
+                                                               fixed("+/- Protein binding"),
+                                                               "Protein binding presence/absence")) %>%
+  mutate(general_functional_consequence = stringr::str_replace(general_functional_consequence,
+                                                               fixed("+/- Catalytic activity and change in DNA binding"),
+                                                               "Catalytic activity presence/absence and change in DNA binding")) %>%
+  mutate(general_functional_consequence = stringr::str_replace(general_functional_consequence,
+                                                               fixed("+/- Oligomerization and change in DNA binding"),
+                                                               "Oligomerization presence/absence and change in DNA binding")) %>%
+  mutate(general_functional_consequence = stringr::str_replace(general_functional_consequence,
+                                                               fixed("+/- Protein or nucleic acid binding and change in DNA binding"),
+                                                               "Protein or nucleic acid binding presence/absence and change in DNA binding"))
+
+write.table(isoform.switch.master.table.annot.with_functions,
+            file = "../../data/results/isoform_switch_master_table_annot_with_functions.tsv",
+            sep = "\t",
+            quote = F,
+            row.names = F)
+
+switch.categories.overall.table = isoform.switch.master.table.annot.with_functions %>%
+  dplyr::select(switch_type,
+                general_functional_consequence) %>%
+  group_by(switch_type) %>%
+  add_count(general_functional_consequence) %>%
+  ungroup() %>%
+  dplyr::rename("switch_count" = "n",
+                "switch_category" = "general_functional_consequence") %>%
+  distinct() %>%
+  arrange(switch_type, desc(switch_count)) %>%
+  group_by(switch_type) %>%
+  mutate(total_switch_count = sum(switch_count)) %>%
+  ungroup() %>%
+  mutate(switch_fraction = switch_count / total_switch_count) %>%
+  mutate(switch_category = ifelse(switch_fraction >= switch.fraction.cutoff, switch_category, "Other")) %>%
+  group_by(switch_type, switch_category) %>%
+  mutate(switch_fraction = ifelse(switch_category != "Other", switch_fraction, sum(switch_fraction))) %>%
+  ungroup() %>%
+  dplyr::select(-switch_count,
+                -total_switch_count) %>%
+  distinct()
+
+switch.categories.overall.list = sort(unique(switch.categories.overall.table$switch_category))
+
+p = switch.categories.overall.table %>%
+  mutate(switch_category = factor(switch_category, levels = switch.categories.overall.list)) %>%
+  mutate(switch_type = factor(switch_type, levels = c("+/+", "-/-", "+/-"))) %>%
+  ggplot() +
+    geom_point(aes(x = switch_category, y = switch_type, colour = switch_type, 
+                   size = switch_fraction)) +
+    scale_colour_manual(values = c("red", "blue", "purple")) +
+    scale_size("Switch fraction", breaks = c(0.1, 0.3, 0.5)) +
+    theme_classic() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+
+p
+
+ggsave(filename = paste0("../../data/results/function_consequence_fractions_scatter_plot_",
+                         switch.fraction.cutoff,
+                         "_overall.pdf"),
+       plot = p,
+       width = 6,
+       height = 4)
+
+# C2H2 ZF switches
+switch.categories.c2h2zf.table = isoform.switch.master.table.annot.with_functions %>%
+  filter(tf_family == "C2H2 ZF") %>%
+  dplyr::select(switch_type,
+                general_functional_consequence) %>%
+  group_by(switch_type) %>%
+  add_count(general_functional_consequence) %>%
+  ungroup() %>%
+  dplyr::rename("switch_count" = "n",
+                "switch_category" = "general_functional_consequence") %>%
+  distinct() %>%
+  arrange(switch_type, desc(switch_count)) %>%
+  group_by(switch_type) %>%
+  mutate(total_switch_count = sum(switch_count)) %>%
+  ungroup() %>%
+  mutate(switch_fraction = switch_count / total_switch_count) %>%
+  mutate(switch_category = ifelse(switch_fraction >= switch.fraction.cutoff, switch_category, "Other")) %>%
+  group_by(switch_type, switch_category) %>%
+  mutate(switch_fraction = ifelse(switch_category != "Other", switch_fraction, sum(switch_fraction))) %>%
+  ungroup() %>%
+  dplyr::select(-switch_count,
+                -total_switch_count) %>%
+  distinct()
+
+switch.categories.c2h2zf.list = sort(unique(switch.categories.c2h2zf.table$switch_category))
+
+p = switch.categories.c2h2zf.table %>%
+  mutate(switch_category = factor(switch_category, levels = switch.categories.c2h2zf.list)) %>%
+  mutate(switch_type = factor(switch_type, levels = c("+/+", "-/-", "+/-"))) %>%
+  ggplot() +
+    geom_point(aes(x = switch_category, y = switch_type, colour = switch_type, 
+                   size = switch_fraction)) +
+    scale_colour_manual(values = c("red", "blue", "purple")) +
+    scale_size("Switch fraction", breaks = c(0.1, 0.3, 0.5)) +
+    theme_classic() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+
+p
+
+ggsave(filename = paste0("../../data/results/function_consequence_fractions_scatter_plot_",
+                         switch.fraction.cutoff,
+                         "_c2h2zf.pdf"),
+       plot = p,
+       width = 6,
+       height = 4)
+
+# Other (non-C2H2 ZF) switches
+switch.categories.other.table = isoform.switch.master.table.annot.with_functions %>%
+  filter(tf_family != "C2H2 ZF") %>%
+  dplyr::select(switch_type,
+                general_functional_consequence) %>%
+  group_by(switch_type) %>%
+  add_count(general_functional_consequence) %>%
+  ungroup() %>%
+  dplyr::rename("switch_count" = "n",
+                "switch_category" = "general_functional_consequence") %>%
+  distinct() %>%
+  arrange(switch_type, desc(switch_count)) %>%
+  group_by(switch_type) %>%
+  mutate(total_switch_count = sum(switch_count)) %>%
+  ungroup() %>%
+  mutate(switch_fraction = switch_count / total_switch_count) %>%
+  mutate(switch_category = ifelse(switch_fraction >= switch.fraction.cutoff, switch_category, "Other")) %>%
+  group_by(switch_type, switch_category) %>%
+  mutate(switch_fraction = ifelse(switch_category != "Other", switch_fraction, sum(switch_fraction))) %>%
+  ungroup() %>%
+  dplyr::select(-switch_count,
+                -total_switch_count) %>%
+  distinct()
+
+switch.categories.other.list = sort(unique(switch.categories.other.table$switch_category))
+
+p = switch.categories.other.table %>%
+  mutate(switch_category = factor(switch_category, levels = switch.categories.other.list)) %>%
+  mutate(switch_type = factor(switch_type, levels = c("+/+", "-/-", "+/-"))) %>%
+  ggplot() +
+    geom_point(aes(x = switch_category, y = switch_type, colour = switch_type, 
+                   size = switch_fraction)) +
+    scale_colour_manual(values = c("red", "blue", "purple")) +
+    scale_size("Switch fraction", breaks = c(0.1, 0.3, 0.5)) +
+    theme_classic() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+
+p
+
+ggsave(filename = paste0("../../data/results/function_consequence_fractions_scatter_plot_",
+                         switch.fraction.cutoff,
+                         "_other.pdf"),
+       plot = p,
+       width = 6,
+       height = 4)
+```
+
+The exact total frequencies are as follows:
+
+```{r, include=T}
+switch.categories.overall.table %>%
+  mutate(switch_category = factor(switch_category, levels = switch.categories.overall.list)) %>%
+  mutate(switch_type = factor(switch_type, levels = c("+/+", "-/-", "+/-")))
+```
+
+The frequencies for switches produced by C2H2 ZF genes are as follows:
+
+```{r, include=T}
+switch.categories.c2h2zf.table %>%
+  mutate(switch_category = factor(switch_category, levels = switch.categories.c2h2zf.list)) %>%
+  mutate(switch_type = factor(switch_type, levels = c("+/+", "-/-", "+/-")))
+```
+
+Check the mechanisms behind the "Change in DNA binding" (+/+):
+
+```{r, include=T}
+isoform.switch.master.table.annot.with_functions %>%
+  filter(tf_family == "C2H2 ZF") %>%
+  filter((switch_type == "+/+") & (general_functional_consequence == "Change in DNA binding")) %>%
+  dplyr::select(ensembl_gene_id, 
+                humantfs_gene_name, 
+                tf_family, 
+                cluster_number_complete,
+                cluster_number_wardd2,
+                ensembl_transcript_id1, 
+                ensembl_transcript_id2,
+                switch_type,
+                ipr_description_list1,
+                ipr_description_list2,
+                summarised_switch,
+                general_functional_consequence,
+                consequence_comment)
+```
+
+So, this category is comprised by switches with a changing number of C2H2 zinc fingers.
+
+Check the mechanisms behind the "Reverse regulation" (+/+):
+
+```{r, include=T}
+isoform.switch.master.table.annot.with_functions %>%
+  filter(tf_family == "C2H2 ZF") %>%
+  filter((switch_type == "+/+") & (general_functional_consequence == "Reverse regulation")) %>%
+  dplyr::select(ensembl_gene_id, 
+                humantfs_gene_name, 
+                tf_family, 
+                cluster_number_complete,
+                cluster_number_wardd2,
+                ensembl_transcript_id1, 
+                ensembl_transcript_id2,
+                switch_type,
+                ipr_description_list1,
+                ipr_description_list2,
+                summarised_switch,
+                general_functional_consequence,
+                consequence_comment)
+```
+
+In 14 out of 15 cases, this is caused by a differentially included transcription repression domain (KRAB).
+
+Check the mechanisms behind the "Change in transcription repression" (+/+):
+
+```{r, include=T}
+isoform.switch.master.table.annot.with_functions %>%
+  filter(tf_family == "C2H2 ZF") %>%
+  filter((switch_type == "+/+") & (general_functional_consequence == "Change in transcription repression")) %>%
+  dplyr::select(ensembl_gene_id, 
+                humantfs_gene_name, 
+                tf_family, 
+                cluster_number_complete,
+                cluster_number_wardd2,
+                ensembl_transcript_id1, 
+                ensembl_transcript_id2,
+                switch_type,
+                ipr_description_list1,
+                ipr_description_list2,
+                summarised_switch,
+                general_functional_consequence,
+                consequence_comment)
+```
+
+So, this is caused by changes in the KRAB domain sequence.
+
+Check the mechanisms behind the "Reverse regulation" (+/-):
+
+```{r, include=T}
+isoform.switch.master.table.annot.with_functions %>%
+  filter(tf_family == "C2H2 ZF") %>%
+  filter((switch_type == "+/-") & (general_functional_consequence == "Reverse regulation")) %>%
+  dplyr::select(ensembl_gene_id, 
+                humantfs_gene_name, 
+                tf_family, 
+                cluster_number_complete,
+                cluster_number_wardd2,
+                ensembl_transcript_id1, 
+                ensembl_transcript_id2,
+                switch_type,
+                ipr_description_list1,
+                ipr_description_list2,
+                summarised_switch,
+                general_functional_consequence,
+                consequence_comment)
+```
+
+So, in the majority of cases, it is caused by the differential inclusion of C2H2 zinc fingers in the presence of the KRAB domain.
+
+The frequencies for switches produced by other TF genes are as follows:
+
+```{r, include=T}
+switch.categories.other.table %>%
+  mutate(switch_category = factor(switch_category, levels = switch.categories.other.list)) %>%
+  mutate(switch_type = factor(switch_type, levels = c("+/+", "-/-", "+/-")))
+```
+
+Check the mechanisms behind the "Reverse regulation" (+/-):
+
+```{r, include=T}
+isoform.switch.master.table.annot.with_functions %>%
+  filter(tf_family != "C2H2 ZF") %>%
+  filter((switch_type == "+/-") & (general_functional_consequence == "Reverse regulation")) %>%
+  dplyr::select(ensembl_gene_id, 
+                humantfs_gene_name, 
+                tf_family, 
+                cluster_number_complete,
+                cluster_number_wardd2,
+                ensembl_transcript_id1, 
+                ensembl_transcript_id2,
+                switch_type,
+                ipr_description_list1,
+                ipr_description_list2,
+                summarised_switch,
+                general_functional_consequence,
+                consequence_comment)
+```
+
+This is due to the differential inclusion of a DBD in the presence of a dimerization domain. This group is comprised of only 6 switches produced by IRF3 and SP140 (two switches each), IRF6, E2F5.
+
+Check the mechanisms behind the "TF / Repressor" category (+/-):
+
+```{r, include=T}
+isoform.switch.master.table.annot.with_functions %>%
+  filter(tf_family != "C2H2 ZF") %>%
+  filter((switch_type == "+/-") & (general_functional_consequence == "TF / Repressor")) %>%
+  dplyr::select(ensembl_gene_id, 
+                humantfs_gene_name, 
+                tf_family, 
+                cluster_number_complete,
+                cluster_number_wardd2,
+                ensembl_transcript_id1, 
+                ensembl_transcript_id2,
+                switch_type,
+                ipr_description_list1,
+                ipr_description_list2,
+                summarised_switch,
+                general_functional_consequence,
+                consequence_comment)
+```
+
+So the presumed repression occurs via the sequestration of coactivators by transcription activation domains in DBD- isoforms.
+
+Check the mechanisms behind the "TF / Ligand sequestering factor" category (+/-):
+
+```{r, include=T}
+isoform.switch.master.table.annot.with_functions %>%
+  filter(tf_family != "C2H2 ZF") %>%
+  filter((switch_type == "+/-") & (general_functional_consequence == "TF / Ligand sequestering factor")) %>%
+  dplyr::select(ensembl_gene_id, 
+                humantfs_gene_name, 
+                tf_family, 
+                cluster_number_complete,
+                cluster_number_wardd2,
+                ensembl_transcript_id1, 
+                ensembl_transcript_id2,
+                switch_type,
+                ipr_description_list1,
+                ipr_description_list2,
+                summarised_switch,
+                general_functional_consequence,
+                consequence_comment)
+```
+
+So, quite expectedly, the presumed sequestration occurs via a ligand-binding domain.
+
+Finally, print out the total numbers of switches that change the protein sequence outside domains or change only UTRs (account for both +/+ and -/- switches, while above I accounted only for +/+ switches when assessed these two switch subtypes):
+
+```{r}
+isoform.switch.master.df = read.delim("../../data/results/isoform_switch_master_table_annot_with_functions.tsv",
+                                      sep = "\t",
+                                      header = T)
+
+isoform.switch.master.df.utrs = isoform.switch.master.df %>%
+  filter(general_functional_consequence == "Change in UTRs")
+
+cat("The number of switches with changes only in UTRs:",
+    nrow(isoform.switch.master.df.utrs), "\n")
+
+cat("Switches with changes in UTRs are either DBD+/DBD+, or DBD-/DBD-:",
+    unique(unique(sort(isoform.switch.master.df.utrs$switch_type)) == c("-/-", "+/+")), 
+    "\n")
+
+isoform.switch.master.df.prot_nondomain = isoform.switch.master.df %>%
+  filter(general_functional_consequence == "Change outside domains")
+
+cat("The number of switches with changes in the protein sequence outside domains:",
+    nrow(isoform.switch.master.df.prot_nondomain), "\n")
+
+cat("Switches with changes in the protein sequence outside domains are either DBD+/DBD+, or DBD-/DBD-:",
+    unique(unique(sort(isoform.switch.master.df.prot_nondomain$switch_type)) == c("-/-", "+/+")), 
+    "\n")
+
+cat("The total number of switches with changes outside domains (either in the protein sequence or UTRs):", 
+    nrow(isoform.switch.master.df.utrs) + nrow(isoform.switch.master.df.prot_nondomain),
+    "(", (nrow(isoform.switch.master.df.utrs) + nrow(isoform.switch.master.df.prot_nondomain)) / nrow(isoform.switch.master.df) * 100, 
+    "% )\n")
+```
+
+## Analyse overrepresentation of switching TFs in TF families
+
+Generate the collection of TF family gene sets:
+
+```{r}
+tf.isoform.ndbds = read.delim("../../data/results/base_dbd_expression_analysis_table.tsv")
+
+all.tf.families = tf.isoform.ndbds %>%
+  pull(tf_family) %>%
+  sort() %>%
+  unique()
+
+all.tf.fam.collection = lapply(all.tf.families,
+                               function(f) {
+                                 return(tf.isoform.ndbds %>%
+                                          filter(tf_family == f) %>%
+                                          pull(humantfs_gene_name) %>%
+                                          unique())
+                               })
+
+names(all.tf.fam.collection) = all.tf.families
+```
+
+Generate the set of switching TFs to use as the background:
+
+```{r}
+switch.table.annot = readRDS(paste0("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_switches_annot_cutoff_", diff.cutoff,".rds"))
+
+switching.tfs = switch.table.annot %>%
+  pull(humantfs_gene_name) %>%
+  unique()
+```
+
+Check if any TF families are over-represented in functional categories of switches:
+
+```{r, include=T}
+library(hypeR)
+switch.categories = sort(unique(isoform.switch.master.table.annot.with_functions$general_functional_consequence))
+hyp_obj_list = lapply(switch.categories,
+                      function(sc) {
+                        switch.category.tfs = isoform.switch.master.table.annot.with_functions %>%
+                          filter(general_functional_consequence == sc) %>%
+                          pull(humantfs_gene_name) %>%
+                          unique()
+                        sw.sc.overr = hypeR(signature = switch.category.tfs,
+                                            genesets = all.tf.fam.collection,
+                                            test = "hypergeometric",
+                                            background = switching.tfs,
+                                            # fdr = 0.05,
+                                            quiet = FALSE)
+                        sw.sc.overr
+                      })
+
+hyp_show(hyp_obj_list[[1]])
+hyp_show(hyp_obj_list[[2]])
+hyp_show(hyp_obj_list[[3]])
+hyp_show(hyp_obj_list[[4]])
+hyp_show(hyp_obj_list[[5]])
+hyp_show(hyp_obj_list[[6]])
+hyp_show(hyp_obj_list[[7]])
+hyp_show(hyp_obj_list[[8]])
+hyp_show(hyp_obj_list[[9]])
+hyp_show(hyp_obj_list[[10]])
+hyp_show(hyp_obj_list[[11]])
+hyp_show(hyp_obj_list[[12]])
+hyp_show(hyp_obj_list[[13]])
+hyp_show(hyp_obj_list[[14]])
+hyp_show(hyp_obj_list[[15]])
+hyp_show(hyp_obj_list[[16]])
+hyp_show(hyp_obj_list[[17]])
+hyp_show(hyp_obj_list[[18]])
+hyp_show(hyp_obj_list[[19]])
+hyp_show(hyp_obj_list[[20]])
+hyp_show(hyp_obj_list[[21]])
+hyp_show(hyp_obj_list[[22]])
+hyp_show(hyp_obj_list[[23]])
+hyp_show(hyp_obj_list[[24]])
+hyp_show(hyp_obj_list[[25]])
+hyp_show(hyp_obj_list[[26]])
+hyp_show(hyp_obj_list[[27]])
+hyp_show(hyp_obj_list[[28]])
+hyp_show(hyp_obj_list[[29]])
+hyp_show(hyp_obj_list[[30]])
+hyp_show(hyp_obj_list[[31]])
+hyp_show(hyp_obj_list[[32]])
+hyp_show(hyp_obj_list[[33]])
+hyp_show(hyp_obj_list[[34]])
+hyp_show(hyp_obj_list[[35]])
+hyp_show(hyp_obj_list[[36]])
+```
+
+Adjust raw p-values:
+
+```{r, include=T}
+raw.pvalues.df = data.frame(functional.category = character(),
+                            tf.family = character(),
+                            raw.pvalue = numeric())
+
+for (i in seq(1, 32)) {
+  raw.pvalues.df %<>%
+    bind_rows(data.frame(functional.category = switch.categories[i],
+                         tf.family = hyp_obj_list[[i]]$data$label,
+                         raw.pvalue = hyp_obj_list[[i]]$data$pval))
+}
+
+raw.pvalues.df %<>%
+  mutate(padj = p.adjust(raw.pvalue, method = "BH"))
+
+# FDR = 5%
+raw.pvalues.df %>%
+  filter(padj < 0.05)
+
+# FDR = 10%
+raw.pvalues.df %>%
+  filter(padj < 0.1)
+
+# FDR = 20%
+raw.pvalues.df %>%
+  filter(padj < 0.2)
+```
+
+Hence, some TF families are over-represented in some switch functional categories under FDR \< 5%:
+
+1.  Nuclear receptors are over-represented in the category "Change in ligand binding."
+
+This over-representation is probably explained by the fact that the majority of ligand-binding domains are annotated in nuclear receptors:
+
+```{r, include=T}
+tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl = read.delim("../../data/results/tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl.tsv")
+
+domain_functional_classification = read.delim("../../data/results/Other_domains_manually_curated_filled_generalized.tsv")
+
+ligand.binding.domain.distrib = tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl %>%
+  filter(humantfs_gene_name %in% switching.tfs) %>%
+  left_join(domain_functional_classification,
+            by = c("ipr_accession" = "ipr_accession")) %>%
+  filter(stringr::str_detect(Molecular_function_general, fixed("Ligand binding"))) %>%
+  dplyr::select(ensembl_gene_id, DBD) %>%
+  distinct() %>%
+  count(DBD) %>%
+  arrange(desc(n))
+
+ligand.binding.domain.distrib
+```
+
+Make a bar plot:
+
+```{r, include=T}
+p = ligand.binding.domain.distrib %>%
+  mutate(N = sum(n)) %>%
+  mutate(freq = n / N) %>%
+  mutate(feature = "Family") %>%
+  dplyr::select(DBD, freq, feature) %>%
+  arrange(desc(freq)) %>%
+  mutate(DBD = factor(DBD, levels = rev(DBD))) %>%
+  ggplot() +
+    geom_col(aes(x = feature,
+                 y = freq,
+                 fill = DBD)) +
+    theme_classic()
+
+p
+
+ggsave(filename = "../../data/results/ligand_binding_domain_distribution_across_tf_families_barplot.pdf",
+       plot = p,
+       width = 3,
+       height = 3)    
+```
+
+But it is important that nuclear receptors change their ligand-binding domains, because it can affect their function.
+
+The change happens in the sequence of the domain:
+
+```{r, include=T}
+isoform.switch.master.table.annot.with_functions %>%
+  filter(tf_family == "Nuclear receptor") %>%
+  filter(general_functional_consequence == "Change in ligand binding") %>%
+  dplyr::select(ensembl_gene_id, 
+                humantfs_gene_name,
+                ensembl_transcript_id1,
+                ensembl_transcript_id2,
+                summarised_switch)
+```
+
+It is indeed interesting that they do not just exclude the domain but change the sequence, which may (a) make the domain non-functional, or (b) make it bind a different ligand, or (c) give it another function.
+
+2.  C2H2 ZF genes are over-represented in the "Change in transcription repression" category. The change is as follows:
+
+```{r, include=T}
+isoform.switch.master.table.annot.with_functions %>%
+  filter(tf_family == "C2H2 ZF") %>%
+  filter(general_functional_consequence == "Change in transcription repression") %>%
+  dplyr::select(ensembl_gene_id, 
+                humantfs_gene_name,
+                ensembl_transcript_id1,
+                ensembl_transcript_id2,
+                summarised_switch)
+```
+
+As I mentioned above, in 14 out of 15 switches with this predicted functional category, the prediction is made based on a changed sequence of the KRAB domain. This change either could make the domain non-functional or make it bind different corepressors.
+
+3.  C2H2 ZFs are over-represented in the "Reverse regulation" category:
+
+```{r, include=T}
+c2h2zfs.rr.switches = isoform.switch.master.table.annot.with_functions %>%
+  filter(tf_family == "C2H2 ZF") %>%
+  filter(general_functional_consequence == "Reverse regulation") %>%
+  dplyr::select(ensembl_gene_id, 
+                humantfs_gene_name,
+                ensembl_transcript_id1,
+                ensembl_transcript_id2,
+                summarised_switch) %>%
+  mutate(summarised_switch_clean = stringr::str_replace_all(summarised_switch, "\\s\\([0-9]++\\)", "")) %>%
+  mutate(loss_type = ifelse(summarised_switch_clean %in% c("Canonical DBD; Transcription repression | Transcription repression",
+                                                           "Canonical DBD; Dimerization | Dimerization",
+                                                           "Canonical DBD; Oligomerization | Oligomerization",
+                                                           "Oligomerization; Transcription repression | Canonical DBD; Oligomerization; Transcription repression",
+                                                           "Transcription repression | Canonical DBD; Transcription repression"),
+                            "Lost DBD",
+                            ifelse(summarised_switch_clean %in% c("Canonical DBD; Transcription repression | Canonical DBD",
+                                                                  "Canonical DBD | Canonical DBD; Transcription repression"),
+                                   "Lost TR domain",
+                                   "Other")))
+
+c2h2zfs.rr.switches
+```
+
+Hence, most of the time the reversal of the regulation occurs because of the loss of DBDs (C2H2 zinc fingers) or a transcription repression domain:
+
+```{r, include=T}
+p = c2h2zfs.rr.switches %>%
+  mutate(N = nrow(.)) %>%
+  group_by(loss_type) %>%
+  do(mutate(., n = nrow(.))) %>%
+  ungroup() %>%
+  mutate(freq = n / N) %>%
+  arrange(loss_type) %>%
+  dplyr::select(loss_type, freq) %>%
+  distinct() %>%
+  mutate(feature = "switches") %>%
+  mutate(loss_type = factor(loss_type, levels = rev(loss_type))) %>%
+    ggplot() +
+    geom_col(aes(x = feature,
+                 y = freq,
+                 fill = loss_type)) +
+    theme_classic()
+
+p
+
+ggsave(filename = "../../data/results/c2h2zf_reverse_regulation_switches_barplot.pdf",
+       plot = p,
+       width = 3,
+       height = 3)
+```
+
+Plot the over-representation of TF families in switch functional categories. As a measure $\mu$ of over-representation, use the ratio of two proportions: (1) Proportion of TFs from a category among all TFs from a family; (2) Proportion of all TFs from a category to all TFs from the background.
+
+First, plot all TF families in the category "Reverse regulation" to make sure that our measure of over-representation makes sense:
+
+```{r, include=T}
+isoform.switch.master.table.annot.with_functions %>%
+  dplyr::select(ensembl_gene_id,
+                humantfs_gene_name,
+                tf_family,
+                general_functional_consequence) %>%
+  distinct() %>%
+  mutate(N = length(unique(ensembl_gene_id))) %>%
+  group_by(tf_family) %>%
+  do(mutate(., n = length(unique(.$ensembl_gene_id)))) %>%
+  ungroup() %>%
+  filter(general_functional_consequence == "Reverse regulation") %>%
+  mutate(K = length(unique(ensembl_gene_id))) %>%
+  add_count(tf_family) %>%
+  dplyr::rename("k" = "nn") %>%
+  mutate(mu = k / n * N / K) %>%
+  mutate(mu0 = 1) %>%
+  dplyr::select(tf_family, N, K, n, k, mu, mu0) %>%
+  distinct()
+```
+
+C2H2 ZFs have $\mu > 1$ as expected (they are over-represented in the selected category). Other TF families with $\mu > 1$ are not over-represented in the category, according to the hypergeometric test above, probably because they have too few switching TFs. Nuclear receptors are also not over-represented in this category, and their observed count in the category is less than expected, which fits.
+
+Next, check the same metric for the "Change in ligand binding":
+
+```{r, include=T}
+isoform.switch.master.table.annot.with_functions %>%
+  dplyr::select(ensembl_gene_id,
+                humantfs_gene_name,
+                tf_family,
+                general_functional_consequence) %>%
+  distinct() %>%
+  mutate(N = length(unique(ensembl_gene_id))) %>%
+  group_by(tf_family) %>%
+  do(mutate(., n = length(unique(.$ensembl_gene_id)))) %>%
+  ungroup() %>%
+  filter(general_functional_consequence == "Change in ligand binding") %>%
+  mutate(K = length(unique(ensembl_gene_id))) %>%
+  add_count(tf_family) %>%
+  dplyr::rename("k" = "nn") %>%
+  mutate(mu = k / n * N / K) %>%
+  mutate(mu0 = 1) %>%
+  dplyr::select(tf_family, N, K, n, k, mu, mu0) %>%
+  distinct()
+```
+
+Nuclear receptors have a very high $\mu$ in this category, which makes sense, as this family is over-represented in the selected category.
+
+Hence, our measure of over-representation $\mu$ makes sense, and we will use it to make a volcano plot of over-represented TF families:
+
+```{r, include=T}
+overr.table = isoform.switch.master.table.annot.with_functions %>%
+  dplyr::select(ensembl_gene_id,
+                humantfs_gene_name,
+                tf_family,
+                general_functional_consequence) %>%
+  distinct() %>%
+  mutate(N = length(unique(ensembl_gene_id))) %>% # All switching TFs - the background
+  group_by(tf_family) %>%
+  do(mutate(., n = length(unique(.$ensembl_gene_id)))) %>% # Switching TFs within each family - the gene set
+  ungroup() %>%
+  group_by(general_functional_consequence) %>%
+  do(mutate(., K = length(unique(.$ensembl_gene_id)))) %>% # Switching TFs within each category - the signature
+  ungroup() %>%
+  group_by(general_functional_consequence, tf_family) %>%
+  do(mutate(., k = length(unique(.$ensembl_gene_id)))) %>% # The overlap between the gene set and the signature
+  ungroup() %>%
+  mutate(r = k / n * N / K) %>%
+  dplyr::select(tf_family, general_functional_consequence, r) %>%
+  distinct()
+
+p = raw.pvalues.df %>%
+  left_join(overr.table,
+            by = c("tf.family" = "tf_family",
+                   "functional.category" = "general_functional_consequence")) %>%
+  mutate(r = ifelse(is.na(r), 0, r)) %>%
+  mutate(overr = paste0(tf.family, " - ", functional.category)) %>%
+  mutate(overr.label = ifelse(padj < 0.05, overr, "")) %>%
+  mutate(sign = ifelse(padj < 0.05, "T", "F")) %>%
+  mutate(sign = factor(sign, levels = c("T", "F"))) %>%
+  ggplot(aes(x = log10(r), 
+             y = -log10(padj))) +
+    geom_point(aes(color = sign),
+               size = 2) + 
+    geom_hline(yintercept = -log10(0.05), linetype = "dashed", linewidth = 0.5) + 
+    theme_classic()
+
+p
+
+ggsave("../../data/results/tf_family_overr_in_switch_categories.pdf", 
+       p, 
+       height = 3, 
+       width = 2)
+```
+
+Investigate overlaps between functional switch categories:
+
+```{r}
+clb.tfs = isoform.switch.master.table.annot.with_functions %>%
+  filter(general_functional_consequence == "Change in ligand binding") %>%
+  pull(humantfs_gene_name) %>%
+  unique()
+
+ctr.tfs = isoform.switch.master.table.annot.with_functions %>%
+  filter(general_functional_consequence == "Change in transcription repression") %>%
+  pull(humantfs_gene_name) %>%
+  unique()
+
+rr.tfs = isoform.switch.master.table.annot.with_functions %>%
+  filter(general_functional_consequence == "Reverse regulation") %>%
+  pull(humantfs_gene_name) %>%
+  unique()
+
+clb.ctr.overlapping.tfs = intersect(clb.tfs, ctr.tfs)
+
+clb.rr.overlapping.tfs = intersect(clb.tfs, rr.tfs)
+
+ctr.rr.overlapping.tfs = intersect(ctr.tfs, rr.tfs)
+
+cat("Size of the category 'Change in ligand binding':", length(clb.tfs), "\n")
+
+cat("Size of the category 'Change in transcription repression':", length(ctr.tfs), "\n")
+
+cat("Size of the category 'Reverse regulation':", length(rr.tfs), "\n")
+
+cat("TFs in both categories - 'Change in ligand binding' and 'Change in transcription repression':",
+    clb.ctr.overlapping.tfs, "\n")
+
+cat("TFs in both categories - 'Change in ligand binding' and 'Reverse regulation':",
+    clb.rr.overlapping.tfs, "\n")
+
+cat("TFs in both categories - 'Change in transcription repression' and 'Reverse regulation':",
+    ctr.rr.overlapping.tfs, "\n")
+```
+
+Therefore, overlaps between the three categories did not affect the significance of the overrepresentations.

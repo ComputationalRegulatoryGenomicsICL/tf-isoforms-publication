@@ -1,0 +1,491 @@
+---
+title: "dbdminus_isoform_function_analysis"
+format: html
+editor: source
+---
+
+## Load libraries
+
+```{r}
+library(dplyr)
+library(stringr)
+library(ggplot2)
+```
+
+## Annotate non-DBDs in DBD- isoforms
+
+Summarise functional types of domains in expressed DBD- isoforms:
+
+```{r, include=T}
+domain_functional_classification = read.delim("../../data/results/Other_domains_manually_curated_filled_generalized.tsv")
+
+tf.isoform.ndbds = read.delim("../../data/results/base_dbd_expression_analysis_table.tsv")
+
+dbdneg.isoforms.expr = readRDS("../../data/results/dbdneg_isoforms_expr.rds")
+
+dbdpos.isoforms.expr = readRDS("../../data/results/dbdpos_isoforms_expr.rds")
+
+tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl = read.delim("../../data/results/tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl.tsv")
+
+dbdminus.domain.table = tf.isoform.ndbds %>%
+  filter(n_dbd == 0) %>%
+  filter(ensembl_transcript_id %in% dbdneg.isoforms.expr) %>%
+  left_join(tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl %>%
+              dplyr::select(ensembl_gene_id, 
+                            ensembl_transcript_id, 
+                            ipr_accession, 
+                            ipr_description,
+                            represents_family) %>%
+              distinct() %>%
+              filter(is.na(represents_family)),
+            by = c("ensembl_gene_id" = "ensembl_gene_id",
+                   "ensembl_transcript_id" = "ensembl_transcript_id")) %>%
+  left_join(domain_functional_classification,
+            by = c("ipr_accession" = "ipr_accession",
+                   "ipr_description" = "ipr_description")) %>%
+  mutate(Molecular_mechanism = ifelse(is.na(Molecular_mechanism), "No domains", Molecular_mechanism),
+         Molecular_function = ifelse(is.na(Molecular_function), "No domains", Molecular_function),
+         Molecular_function_general = ifelse(is.na(Molecular_function_general), "No domains", Molecular_function_general))
+
+dbdminus.domain.table.per_function = dplyr::bind_rows(lapply(1:(nrow(dbdminus.domain.table)),
+                                                               function(i) {
+                                                                 df.i = dbdminus.domain.table[i, ]
+                                                                 return(data.frame(ensembl_gene_id = df.i$ensembl_gene_id,
+                                                                                   humantfs_gene_name = df.i$humantfs_gene_name,
+                                                                                   tf_family = df.i$tf_family,
+                                                                                   ensembl_transcript_id = df.i$ensembl_transcript_id,
+                                                                                   n_dbd = df.i$n_dbd,
+                                                                                   ipr_accession = df.i$ipr_accession,
+                                                                                   ipr_description = df.i$ipr_description,
+                                                                                   Molecular_function_general = unlist(stringr::str_split(df.i$Molecular_function_general, 
+                                                                                                                                          fixed("; ")))))
+                                                               })) %>%
+  group_by(ensembl_transcript_id) %>%
+  mutate(general_function_list = paste0(unique(sort(Molecular_function_general)), collapse = "; ")) %>%
+  ungroup()
+
+saveRDS(dbdminus.domain.table.per_function,
+        "../../data/results/dbdminus_domain_table_per_function_rerun.rds")
+```
+
+## Summarise non-DBD types in expressed DBD- isoforms
+
+Print the numbers of expressed DBD- isoforms produced by C2H2 ZF genes and other TF genes:
+
+```{r}
+dbdminus.domain.table.per_function = readRDS("../../data/results/dbdminus_domain_table_per_function_rerun.rds")
+
+dbdneg.isoforms.expr.c2h2zf.n = dbdminus.domain.table.per_function %>%
+  filter(tf_family == "C2H2 ZF") %>%
+  pull(ensembl_transcript_id) %>%
+  unique() %>%
+  length()
+
+dbdneg.isoforms.expr.nonc2h2zf.n = dbdminus.domain.table.per_function %>%
+  filter(tf_family != "C2H2 ZF") %>%
+  pull(ensembl_transcript_id) %>%
+  unique() %>%
+  length()
+
+cat("The number of expressed DBD- isoforms produced by C2H2 ZF genes:", dbdneg.isoforms.expr.c2h2zf.n, "\n")
+
+cat("The number of expressed DBD- isoforms produced by other TF genes:", dbdneg.isoforms.expr.nonc2h2zf.n, "\n")
+```
+
+Plot proportions of expressed DBD- isoforms per non-DBD functional class. As one expressed DBD- isoform may contain more than one non-DBD, the proportions may not sum up to 1:
+
+```{r}
+dbdminus.domain.table.per_function = readRDS("../../data/results/dbdminus_domain_table_per_function_rerun.rds")
+
+# C2H2 ZFs
+p = dbdminus.domain.table.per_function %>%
+  filter(tf_family == "C2H2 ZF") %>%
+  dplyr::select(ensembl_gene_id, ensembl_transcript_id, Molecular_function_general) %>%
+  distinct() %>%
+  mutate(total_n = length(unique(.$ensembl_transcript_id))) %>%
+  add_count(Molecular_function_general) %>%
+  mutate(frequency = n / total_n) %>%
+  dplyr::select(Molecular_function_general, frequency) %>%
+  distinct() %>%
+  arrange(desc(frequency)) %>%
+  mutate(Molecular_function_general = factor(Molecular_function_general, levels = Molecular_function_general)) %>%
+  ggplot(aes(x = Molecular_function_general, 
+             y = frequency)) +
+    geom_col(fill = "orange") +
+    scale_y_continuous(limits = c(0, 0.6), breaks = scales::pretty_breaks(7)) +
+    theme_classic() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+
+p
+
+ggsave(filename = "../../data/results/dbdminus_per_nondbd_functions_c2h2zf_fractions_barplot_rerun.pdf",
+       plot = p,
+       width = 6,
+       height = 6)
+
+# Other TFs
+dbdminus.domain.table.per_function_summary.nonc2h2zf = dbdminus.domain.table.per_function %>%
+  filter(tf_family != "C2H2 ZF") %>%
+  dplyr::select(ensembl_gene_id, ensembl_transcript_id, Molecular_function_general) %>%
+  distinct() %>%
+  mutate(total_n = length(unique(.$ensembl_transcript_id))) %>%
+  add_count(Molecular_function_general) %>%
+  mutate(frequency = n / total_n) %>%
+  dplyr::select(Molecular_function_general, frequency) %>%
+  distinct() %>%
+  arrange(desc(frequency))
+
+freq.rank.cutoff = 10
+
+p = dbdminus.domain.table.per_function_summary.nonc2h2zf %>% 
+  mutate(freq_rank = row_number()) %>%
+  mutate(Molecular_function_general = ifelse(freq_rank > freq.rank.cutoff, "Other",
+                                             Molecular_function_general)) %>%
+  mutate(Molecular_function_general = factor(Molecular_function_general, levels = unique(Molecular_function_general))) %>%
+  ggplot(aes(x = Molecular_function_general, 
+             y = frequency)) +
+  geom_col(fill = "blue") +
+  scale_y_continuous(limits = c(0, 0.6), breaks = scales::pretty_breaks(7)) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+
+p
+
+ggsave(filename = "../../data/results/dbdminus_per_nondbd_functions_non-c2h2zf_fractions_barplot_rerun.pdf",
+       plot = p,
+       width = 6,
+       height = 6)
+```
+
+Transcription repression domains in the C2H2 ZF-expressed DBD- isoforms are as follows:
+
+```{r, include=T}
+dbdminus.domain.table.per_function %>%
+  filter(tf_family == "C2H2 ZF") %>%
+  filter(general_function_list == "Transcription repression") %>%
+  add_count(ipr_description) %>%
+  dplyr::select(ipr_accession, ipr_description, n) %>%
+  distinct() %>%
+  arrange(desc(n))
+```
+
+Oligomerization domains in the C2H2 ZF-expressed DBD- isoforms are as follows:
+
+```{r, include=T}
+dbdminus.domain.table.per_function %>%
+  filter(tf_family == "C2H2 ZF") %>%
+  filter(general_function_list == "Oligomerization") %>%
+  add_count(ipr_description) %>%
+  dplyr::select(ipr_accession, ipr_description, n) %>%
+  distinct() %>%
+  arrange(desc(n))
+```
+
+Dimerization domains in the C2H2 ZF-expressed DBD- isoforms are as follows:
+
+```{r, include=T}
+dbdminus.domain.table.per_function %>%
+  filter(tf_family == "C2H2 ZF") %>%
+  filter(general_function_list == "Dimerization") %>%
+  add_count(ipr_description) %>%
+  dplyr::select(ipr_accession, ipr_description, n) %>%
+  distinct() %>%
+  arrange(desc(n))
+```
+
+Dimerization domains in DBD- isoforms expressed by other TF genes are as follows:
+
+```{r, include=T}
+dbdminus.domain.table.per_function %>%
+  filter(tf_family != "C2H2 ZF") %>%
+  filter(general_function_list == "Dimerization") %>%
+  add_count(ipr_description) %>%
+  dplyr::select(ipr_accession, ipr_description, n) %>%
+  distinct() %>%
+  arrange(desc(n))
+```
+
+Ligand-binding domains in DBD- isoforms expressed by other TF genes are as follows:
+
+```{r, include=T}
+dbdminus.domain.table.per_function %>%
+  filter(tf_family != "C2H2 ZF") %>%
+  filter(general_function_list == "Ligand binding") %>%
+  add_count(ipr_description) %>%
+  dplyr::select(ipr_accession, ipr_description, n) %>%
+  distinct() %>%
+  arrange(desc(n))
+```
+
+Protein-binding domains in DBD- isoforms expressed by other TF geness are as follows:
+
+```{r, include=T}
+dbdminus.domain.table.per_function %>%
+  filter(tf_family != "C2H2 ZF") %>%
+  filter(general_function_list == "Protein binding") %>%
+  add_count(ipr_description) %>%
+  dplyr::select(ipr_accession, ipr_description, n) %>%
+  distinct() %>%
+  arrange(desc(n))
+```
+
+Transcription regulation domains in DBD- isoforms produced by other TF genes are as follows:
+
+```{r, include=T}
+dbdminus.domain.table.per_function %>%
+  filter(tf_family != "C2H2 ZF") %>%
+  filter(general_function_list == "Transcription regulation") %>%
+  add_count(ipr_description) %>%
+  dplyr::select(ipr_accession, ipr_description, n) %>%
+  distinct() %>%
+  arrange(desc(n))
+```
+
+However, many expressed DBD- isoforms do not have any domains:
+
+```{r}
+# C2H2 ZFs
+domainless.c2h2zf.n = dbdminus.domain.table %>%
+  filter(tf_family == "C2H2 ZF") %>%
+  dplyr::select(ensembl_transcript_id,
+                Molecular_function_general) %>%
+  distinct() %>%
+  filter(Molecular_function_general== "No domains") %>%
+  nrow()
+  
+cat("The proportion of DBD- isoforms produced by C2H2 ZFs that do not have domains:", 
+    domainless.c2h2zf.n / dbdneg.isoforms.expr.c2h2zf.n, 
+    "(", domainless.c2h2zf.n, "/", dbdneg.isoforms.expr.c2h2zf.n, ")", "\n")
+
+# Other TFs
+domainless.nonc2h2zf.n = dbdminus.domain.table %>%
+  filter(tf_family != "C2H2 ZF") %>%
+  dplyr::select(ensembl_transcript_id,
+                Molecular_function_general) %>%
+  distinct() %>%
+  filter(Molecular_function_general== "No domains") %>%
+  nrow()
+  
+cat("The proportion of DBD- isoforms produced by other TF genes that do not have domains:", 
+    domainless.nonc2h2zf.n / dbdneg.isoforms.expr.nonc2h2zf.n, 
+    "(", domainless.nonc2h2zf.n, "/", dbdneg.isoforms.expr.nonc2h2zf.n, ")", "\n")
+```
+
+Form a list of combinations of non-DBD functional classes to annotate.
+
+```{r}
+write.table(dbdminus.domain.table.per_function %>% 
+              dplyr::select(general_function_list) %>% 
+              distinct(),
+            file = "../../data/results/dbdminus_domain_table_per_function_raw_rerun.tsv",
+            quote = F,
+            sep = "\t", 
+            row.names = F)
+```
+
+Next, we annotated the list of non-DBD combinations manually based on known examples (the result is in the table `../../data/results/dbdminus_domain_table_per_function_filled.tsv`). Previously, I formed the raw list (and hence, the filled list) based on all annotated DBD- isoforms, but now I form the raw one based only on the expressed DBD- isoforms (as I switched to using only them for my analysis), but I retained the full filled table for convenience.
+
+Functionally annotate expressed DBD- isoforms according to non-DBD combinations found in all annotated DBD- isoforms:
+
+```{r}
+dbdminus.domain.table.per_function.filled = read.delim("../../data/results/dbdminus_domain_table_per_function_filled.tsv",
+                                                       header = T,
+                                                       sep = "\t")
+
+dbdminus.domain.table.per_function.annot = dbdminus.domain.table.per_function %>%
+  left_join(dbdminus.domain.table.per_function.filled,
+            by = c("general_function_list" = "general_function_list"))
+
+write.table(dbdminus.domain.table.per_function.annot %>%
+              dplyr::select(ensembl_gene_id,
+                            humantfs_gene_name,
+                            tf_family,
+                            ensembl_transcript_id,
+                            isoform_function) %>%
+              distinct(),
+            file = "../../data/results/dbdminus_function_annotation_rerun.tsv",
+            quote = F,
+            sep = "\t", 
+            row.names = F)
+```
+
+Plot the proportions of expressed DBD- isoforms per predicted functional class:
+
+```{r}
+freq.rank.cutoff = 5
+
+# C2H2 ZFs
+p = dbdminus.domain.table.per_function.annot %>%
+  filter(tf_family == "C2H2 ZF") %>%
+  dplyr::select(ensembl_transcript_id, isoform_function) %>%
+  distinct() %>%
+  dplyr::count(isoform_function) %>%
+  arrange(desc(n)) %>%
+  mutate(total_n = sum(n)) %>%
+  mutate(function_freq = n / total_n) %>%
+  mutate(freq_rank = row_number()) %>%
+  mutate(isoform_function = ifelse(freq_rank > freq.rank.cutoff, "Other",
+                                   isoform_function)) %>%
+  mutate(isoform_function = factor(isoform_function, levels = unique(isoform_function))) %>%
+  ggplot(aes(x = isoform_function, y = function_freq)) +
+    geom_col(fill = "orange") +
+    scale_y_continuous(limits = c(0, 0.55), breaks = scales::pretty_breaks(6)) +
+    theme_classic() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+
+p
+
+ggsave(filename = "../../data/results/nondbd_isoform_functions_c2h2zf_fractions_barplot.pdf",
+       plot = p,
+       width = 6,
+       height = 6)
+
+# Other TFs
+p = dbdminus.domain.table.per_function.annot %>%
+  filter(tf_family != "C2H2 ZF") %>%
+  dplyr::select(ensembl_transcript_id, isoform_function) %>%
+  distinct() %>%
+  dplyr::count(isoform_function) %>%
+  arrange(desc(n)) %>%
+  mutate(total_n = sum(n)) %>%
+  mutate(function_freq = n / total_n) %>%
+  mutate(freq_rank = row_number()) %>%
+  mutate(isoform_function = ifelse(freq_rank > freq.rank.cutoff, "Other",
+                                   isoform_function)) %>%
+  mutate(isoform_function = factor(isoform_function, levels = unique(isoform_function))) %>%
+  ggplot(aes(x = isoform_function, y = function_freq)) +
+    geom_col(fill = "blue") +
+    scale_y_continuous(limits = c(0, 0.7), breaks = scales::pretty_breaks(7)) +
+    theme_classic() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+
+p
+ 
+ggsave(filename = "../../data/results/nondbd_isoform_functions_non-c2h2zf_fractions_barplot.pdf",
+       plot = p,
+       width = 6,
+       height = 6)
+```
+
+Print out the top proportions of expressed DBD- isoforms of C2H2 ZF genes:
+
+```{r}
+dbdminus.domain.table.per_function.annot %>%
+  filter(tf_family == "C2H2 ZF") %>%
+  dplyr::select(ensembl_transcript_id, isoform_function) %>%
+  distinct() %>%
+  dplyr::count(isoform_function) %>%
+  arrange(desc(n)) %>%
+  mutate(total_n = sum(n)) %>%
+  mutate(function_freq = n / total_n) %>%
+  mutate(isoform_function = factor(isoform_function, levels = isoform_function))
+```
+
+Print out the top proportions of expressed DBD- isoforms of other TF genes:
+
+```{r}
+dbdminus.domain.table.per_function.annot %>%
+  filter(tf_family != "C2H2 ZF") %>%
+  dplyr::select(ensembl_transcript_id, isoform_function) %>%
+  distinct() %>%
+  dplyr::count(isoform_function) %>%
+  arrange(desc(n)) %>%
+  mutate(total_n = sum(n)) %>%
+  mutate(function_freq = n / total_n) %>%
+  mutate(isoform_function = factor(isoform_function, levels = isoform_function))
+```
+
+```{r}
+dbdminus.domain.table.per_function.annot %>%
+  filter(is.na(isoform_function))
+```
+
+29% of C2H2 ZF and 56% of non-C2H2 ZF expressed DBD- isoforms have an "Unclear" function. Summarise domain functions in these DBD- isoforms to see why:
+
+```{r, include=T}
+# C2H2 ZF
+p = dbdminus.domain.table.per_function.annot %>%
+  filter(tf_family == "C2H2 ZF") %>%
+  filter(isoform_function == "Unclear") %>%
+  dplyr::select(ensembl_transcript_id, general_function_list) %>%
+  distinct() %>%
+  dplyr::count(general_function_list) %>%
+  arrange(desc(n)) %>%
+  mutate(total_n = sum(n)) %>%
+  mutate(function_freq = n / total_n) %>%
+  mutate(general_function_list = factor(general_function_list, levels = general_function_list)) %>%
+  ggplot(aes(x = general_function_list, y = function_freq)) +
+    geom_col(fill = "orange") +
+    theme_classic() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+
+p
+
+ggsave(filename = "../../data/results/nondbd_unclear_c2h2zf_fractions_barplot.pdf",
+       plot = p,
+       width = 6,
+       height = 6)
+
+# Non-C2H2 ZF
+p = dbdminus.domain.table.per_function.annot %>%
+  filter(tf_family != "C2H2 ZF") %>%
+  filter(isoform_function == "Unclear") %>%
+  dplyr::select(ensembl_transcript_id, general_function_list) %>%
+  distinct() %>%
+  dplyr::count(general_function_list) %>%
+  arrange(desc(n)) %>%
+  mutate(total_n = sum(n)) %>%
+  mutate(function_freq = n / total_n) %>%
+  mutate(general_function_list = factor(general_function_list, levels = general_function_list)) %>%
+  ggplot(aes(x = general_function_list, y = function_freq)) +
+    geom_col(fill = "blue") +
+    theme_classic() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+
+p
+
+ggsave(filename = "../../data/results/nondbd_unclear_non-c2h2zf_fractions_barplot.pdf",
+       plot = p,
+       width = 6,
+       height = 6)
+```
+
+Hence, the vast majority of expressed DBD- isoforms with an "Unclear" function just do not have domains.
+
+Check which DBD- isoforms from our compendium we find:
+
+```{r}
+tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl = read.delim("../../data/results/tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl.tsv")
+
+tf.isoform.ndbds = read.delim("../../data/results/base_dbd_expression_analysis_table.tsv")
+
+gene.name = "ZGPAT" #  IKZF1, IKZF2, HOXA1, TEAD4, ZGPAT
+
+dbdneg.isoforms = tf.isoform.ndbds %>%
+  filter(humantfs_gene_name == gene.name) %>%
+  filter(n_dbd == 0) %>%
+  pull(ensembl_transcript_id)
+
+dbdneg.isoforms
+
+tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl %>%
+  filter(ensembl_transcript_id %in% dbdneg.isoforms) %>%
+  dplyr::select(humantfs_gene_name,
+                ensembl_transcript_id,
+                ipr_accession,
+                ipr_description,
+                domain_type,
+                represents_family,
+                DBD) %>%
+  distinct()
+```
+
+1) For IKZF1, we only have three domainless DBD- isoforms, while ([Sun et al., 1996](https://doi.org/10.1002/j.1460-2075.1996.tb00920.x)) described a DBD- isoform of this gene with a dimerization domain (two C-terminal zinc fingers). The reason we do not see this isoform in our DBD- set may be due to the InterProScan missing it or us missing the isoform due to its insufficient annotation quality in Ensembl v99 (so it got filtered out in our analysis). 
+
+2) For IKZF2, we do not have a DBD- isoform. This may be due to either its absence from the Ensembl v99 annotation or to an insufficient annotation quality of the isoform (so it got filtered out in our analysis).
+
+3) For HOXA1, we have only one domainless DBD- isoform, while ([Fernandez and Gudas, 2009](https://onlinelibrary.wiley.com/doi/10.1002/jcb.22023)) found a DBD- isoform of this gene with a dimerization region, although they did not describe a particular domain required for the dimarization.
+
+4) For TEAD4, we have a DBD- isoform with a YAP binding domain, which matches the description of the DBD- isoform of this TF gene described in [Qi et al., 2016](https://www.nature.com/articles/ncomms11840).
+
+5) For ZGPAT, we have a domainless DBD- isoform, while ([Yu et al., 2010](https://www.sciencedirect.com/science/article/pii/S0021925820548771)) described a DBD- isoform of this TF with a transcription repression domain.

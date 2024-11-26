@@ -1,0 +1,189 @@
+---
+title: "Isoform expression analysis"
+author: "Sviatoslav Sidorov"
+format: html
+editor: visual
+---
+
+## Load libraries
+
+```{r}
+library(dplyr)
+library(ggplot2)
+```
+
+## Define constants
+
+```{r}
+min.norm.count = 5 # Min DESeq2-normalised count to deem an isoform expressed in a tissue
+
+expr.tissue.fraction = 0.2 # Fraction of tissues where an isoform is expressed that are taken for the calculation of 
+                           # its buffered expression
+```
+
+## Calculate the proportions of expressed isoforms
+
+Generate the sets of DBD- and DBD+ isoforms:
+
+```{r}
+tf.isoform.ndbds = read.delim("../../data/results/base_dbd_expression_analysis_table.tsv")
+
+dbdneg.isoforms = tf.isoform.ndbds %>%
+  filter(n_dbd == 0) %>%
+  pull(ensembl_transcript_id)
+
+dbdpos.isoforms = tf.isoform.ndbds %>%
+  filter(n_dbd > 0) %>%
+  filter(!ensembl_transcript_id %in% c("ENST00000444486", "ENST00000434737")) %>% # Remove fusion isoforms
+  pull(ensembl_transcript_id)
+
+cat("Total number of TF isoforms:", length(dbdpos.isoforms) + length(dbdneg.isoforms), "\n")
+
+cat("Number of DBD- isoforms    :", length(dbdneg.isoforms), "\n")
+
+cat("Number of DBD+ isoforms    :", length(dbdpos.isoforms), "\n")
+```
+
+Load the expression data:
+
+```{r}
+tf.isoforms.expr = readRDS("../../data/results/gtex8_processed/tf_isoforms_expr_ids.rds")
+```
+
+Calculate and plot the proportions of expressed DBD- and DBD+ isoforms:
+
+```{r}
+dbdneg.isoforms.expr = dbdneg.isoforms[dbdneg.isoforms %in% tf.isoforms.expr]
+
+dbdpos.isoforms.expr = dbdpos.isoforms[dbdpos.isoforms %in% tf.isoforms.expr]
+
+saveRDS(dbdneg.isoforms.expr, 
+        "../../data/results/dbdneg_isoforms_expr.rds")
+
+saveRDS(dbdpos.isoforms.expr, 
+        "../../data/results/dbdpos_isoforms_expr.rds")
+
+p = data.frame(isoform_type = c(rep("DBD-", 2), rep("DBD+", 2)),
+               isoform_expr = rep(c("Yes", "No"), 2),
+               isoform_prop = c(length(dbdneg.isoforms.expr) / length(dbdneg.isoforms),
+                                1 - length(dbdneg.isoforms.expr) / length(dbdneg.isoforms),
+                                length(dbdpos.isoforms.expr) / length(dbdpos.isoforms),
+                                1 - length(dbdpos.isoforms.expr) / length(dbdpos.isoforms))) %>%
+  ggplot(aes(x = isoform_type,
+             y = isoform_prop,
+             group = isoform_type)) +
+    geom_col(aes(fill = isoform_expr)) +
+    theme_classic()
+
+ggsave("../../data/results/isoform_expression_analysis/tf_isoforms_expressed_proportions.pdf",
+       p)
+
+cat("\n")
+
+dbdneg.isoforms.expr.freq = length(dbdneg.isoforms.expr) / length(dbdneg.isoforms)
+
+dbdpos.isoforms.expr.freq = length(dbdpos.isoforms.expr) / length(dbdpos.isoforms)
+
+cat(paste0("Number of expressed DBD- isoforms: ", length(dbdneg.isoforms.expr), 
+           " (", round(dbdneg.isoforms.expr.freq * 100), "%)\n"))
+
+cat(paste0("Number of expressed DBD+ isoforms: ", length(dbdpos.isoforms.expr), 
+           " (", round(length(dbdpos.isoforms.expr) / length(dbdpos.isoforms) * 100), "%)\n"))
+
+saveRDS(data.frame(isoform.type = c(rep("DBD+", 2), rep("DBD-", 2)),
+                   expression.mode = c(rep(c("Not expressed", "Expressed"), 2)),
+                   isoform.num = c(length(dbdpos.isoforms) - length(dbdpos.isoforms.expr),
+                                   length(dbdpos.isoforms.expr),
+                                   length(dbdneg.isoforms) - length(dbdneg.isoforms.expr),
+                                   length(dbdneg.isoforms.expr))),
+        "../../data/results/isoform_expression_stats.rds")
+```
+
+69% (483) of DBD- isoforms and 85% (2918) of DBD+ isoforms are expressed in at least one tissue.
+
+## Calculate the buffered expression of TF isoforms
+
+Calculate the buffered expression level of each TF isoform as the mean of the top `expr.tissue.fraction` of its expression levels in tissues where it is counted expressed (rounded number of levels, each of them in DESeq2-normalised counts):
+
+```{r}
+calculate_buffered_expr = function(df, fract) {
+  tissues.expr.n = length(which(df >= min.norm.count))
+  
+  top.n = round(tissues.expr.n * fract) + 1 # +1 to account for the fact that the first (1/fract - 1) numbers round to 0
+  
+  return(mean(head(sort(unlist(df), decreasing = T), top.n)))
+}
+
+expressed.isoforms.df = readRDS("../../data/results/gtex8_processed/tfs_nontfs_selected_table_deseq2_selected_med_expr.rds")
+
+tissue.names = readRDS("../../data/results/gtex8_processed/tissue_names.rds")
+
+isoform.buf.expr.df = expressed.isoforms.df %>%
+  rowwise() %>%
+    mutate(buff_expr = calculate_buffered_expr(pick(all_of(tissue.names)), expr.tissue.fraction)) %>%
+  ungroup() %>%
+  dplyr::select(transcript_id,
+                gene_id,
+                buff_expr)
+
+saveRDS(isoform.buf.expr.df,
+        "../../data/results/gtex8_processed/tf_nontf_isoform_buffered_expr_deseq2.rds")
+```
+
+## Calculate the distributions of the buffered expression levels of expressed DBD- and DBD+ isoforms
+
+Distributions of the buffered expression levels of expressed DBD- and DBD+ isoforms:
+
+```{r}
+isoform.buf.expr.df = readRDS("../../data/results/gtex8_processed/tf_nontf_isoform_buffered_expr_deseq2.rds")
+
+p = data.frame(bind_rows(isoform.buf.expr.df %>%
+                           filter(transcript_id %in% dbdneg.isoforms.expr) %>%
+                           dplyr::select(-gene_id) %>%
+                           mutate(isoform_type = "DBD-"),
+                         isoform.buf.expr.df %>%
+                           filter(transcript_id %in% dbdpos.isoforms.expr) %>%
+                           dplyr::select(-gene_id) %>%
+                           mutate(isoform_type = "DBD+"))) %>%
+  mutate(isoform_type = factor(isoform_type, levels = c("DBD-", "DBD+"))) %>%
+  ggplot(aes(x = isoform_type,
+             y = log10(buff_expr))) + 
+    geom_violin(aes(fill = isoform_type)) +
+    geom_boxplot(aes(fill = isoform_type),
+                 width = 0.25) +
+    scale_fill_manual(values = c("#00BFC4", "#F8766D")) +
+    theme_classic()
+
+p
+
+ggsave("../../data/results/isoform_expression_analysis/tf_isoforms_mean-top20pct_expressed_distributions.pdf",
+       p)
+
+cat("\n")
+```
+
+Test the statistical significance of the difference (shift) between the two distributions using the Wilcoxon rank-sum test:
+
+```{r}
+dbdneg.buf.expr = isoform.buf.expr.df %>%
+  filter(transcript_id %in% dbdneg.isoforms.expr) %>%
+  pull(buff_expr)
+
+cat("Median buffered expression of buffered-expressed DBD- isoforms:", 
+    median(dbdneg.buf.expr),
+    "\n")
+
+dbdpos.buf.expr = isoform.buf.expr.df %>%
+  filter(transcript_id %in% dbdpos.isoforms.expr) %>%
+  pull(buff_expr)
+
+cat("Median buffered expression of buffered-expressed DBD+ isoforms:", 
+    median(dbdpos.buf.expr),
+    "\n")
+
+wilcox.test(x = dbdneg.buf.expr,
+            y = dbdpos.buf.expr,
+            alternative = "two.sided")
+```
+
+The shift between the two distributions is significant (under the p-value threshold of 5%), and from the visualisation of the distributions, we can see that DBD- isoforms tend to have a much lower buffered expression than DBD+ isoforms.

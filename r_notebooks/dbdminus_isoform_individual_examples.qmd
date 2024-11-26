@@ -1,0 +1,430 @@
+---
+title: "Broadly and highly expressed DBD- isoforms"
+format: html
+editor: source
+---
+
+## Load libraries
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+library(magrittr)
+library(stringr)
+```
+
+## Find broadly and highly expressed DBD- isoforms
+
+Find the broadly expressed DBD- isoforms that are at the same time highly expressed in at least some tissues:
+
+```{r}
+tfs.med.isoforms.ts = readRDS("../../data/results/gtex8_processed/tfs_isoforms_deseq2-normalised_final_selected_ts_log2_cont.rds")
+
+tf.isoform.ndbds = read.delim("../../data/results/base_dbd_expression_analysis_table.tsv")
+
+dbdneg.isoforms = tf.isoform.ndbds %>%
+  filter(n_dbd == 0) %>%
+  pull(ensembl_transcript_id)
+
+dbdpos.isoforms = tf.isoform.ndbds %>%
+  filter(n_dbd > 0) %>%
+  filter(!ensembl_transcript_id %in% c("ENST00000444486", "ENST00000434737")) %>% # Remove fusion isoforms
+  pull(ensembl_transcript_id)
+
+tfs.med.isoforms.ts.dbdtype = tfs.med.isoforms.ts %>%
+  mutate(category = ifelse(transcript_id %in% dbdpos.isoforms, 
+                           "DBD+",
+                           ifelse(transcript_id %in% dbdneg.isoforms,
+                                  "DBD-",
+                                  "Error")))
+
+isoform.buf.expr.df = readRDS("../../data/results/gtex8_processed/tf_nontf_isoform_buffered_expr_deseq2.rds")
+
+tfs.med.isoforms.ts.dbdtype.buff = tfs.med.isoforms.ts.dbdtype %>%
+  left_join(isoform.buf.expr.df %>%
+              dplyr::select(-gene_id),
+            by = c("transcript_id" = "transcript_id"))
+
+tfs.med.isoforms.ts.dbdtype.buff.binned = tfs.med.isoforms.ts.dbdtype.buff %>%
+  mutate(buff_expr_bin = ntile(buff_expr, n = 10))
+
+saveRDS(tfs.med.isoforms.ts.dbdtype.buff.binned,
+        file = "../../data/results/tfs_med_isoforms_ts_dbdtype_buff_binned.rds")
+
+broad.high.dbdminus.isoforms = tfs.med.isoforms.ts.dbdtype.buff.binned %>%
+  filter(category == "DBD-") %>%
+  filter(buff_expr_bin %in% c(7, 8, 9, 10)) %>%
+  filter(tissue_specificity <= 0.25) %>%
+  arrange(-buff_expr)
+
+write.table(broad.high.dbdminus.isoforms,
+            file = "../../data/results/broad_high_dbdminus_isoforms.tsv",
+            quote = F,
+            sep = "\t",
+            row.names = F,
+            col.names = T)
+```
+
+We found
+
+```{r}
+broad.high.dbdminus.isoforms %>%
+  nrow()
+```
+
+broadly expressed DBD- isoforms with a high buffered expression, produced by
+
+```{r}
+broad.high.dbdminus.isoforms %>%
+  pull(gene_id) %>%
+  unique() %>%
+  length()
+```
+
+TF genes.
+
+Functionally annotate the obtained DBD- isoforms:
+
+```{r}
+dbdminus.domain.table.per_function = readRDS("../../data/results/dbdminus_domain_table_per_function.rds")
+
+dbdminus.domain.table.per_function.filled = read.delim("../../data/results/dbdminus_domain_table_per_function_filled.tsv",
+                                                       header = T,
+                                                       sep = "\t")
+
+dbdminus.domain.table.per_function.annot = dbdminus.domain.table.per_function %>%
+  left_join(dbdminus.domain.table.per_function.filled,
+            by = c("general_function_list" = "general_function_list")) %>%
+  dplyr::select(-n_dbd,
+                -ipr_accession,
+                -ipr_description,
+                -Molecular_function_general) %>%
+  distinct()
+
+saveRDS(dbdminus.domain.table.per_function.annot,
+        file = "../../data/results/dbdminus_domain_table_per_function_annot.rds")
+
+broad.high.dbdminus.isoforms %<>%
+  left_join(dbdminus.domain.table.per_function.annot,
+            by = c("transcript_id" = "ensembl_transcript_id",
+                   "gene_id" = "ensembl_gene_id"))
+
+saveRDS(broad.high.dbdminus.isoforms,
+        file = "../../data/results/broad_high_dbdminus_isoforms_df.rds")
+```
+
+## Plot broadly and highly expressed DBD- isoforms
+
+Prepare a general function for drawing linear plots of TF isoform expression:
+
+```{r}
+compile_isoform_expression = function(tf.transcripts, isof.category, tissue.names) {
+  tf.df = data.frame(ensembl_transcript_id = rep(tf.transcripts, times = rep(length(tissue.names), length(tf.transcripts))))
+  
+  tf.df$status = unlist(lapply(tf.transcripts,
+                               function(tr.id) {
+                                 n_dbd = tf.isoform.ndbds %>%
+                                   filter(ensembl_transcript_id == tr.id) %>%
+                                   pull(n_dbd)
+                                 
+                                 tr.category = isof.category[tf.transcripts == tr.id]
+                                 
+                                 status = ifelse(tr.category == "main",
+                                                 ifelse(n_dbd > 0, "1", "2"),
+                                                 ifelse(n_dbd > 0, "3", "4"))
+                                 
+                                 return(rep(status, length(tissue.names)))
+                               }))
+  
+  tf.df$status = factor(tf.df$status, levels = c("1", "2", "3", "4"))
+  
+  tf.df$tissue = rep(tissue.names, length(tf.transcripts))
+  
+  tf.df$tissue = factor(tf.df$tissue, levels = tissue.names)
+  
+  tf.df$expression_value = unlist(lapply(tf.transcripts,
+                                         function(tr.id) {
+                                           tfs.med.isoforms %>% 
+                                             filter(transcript_id == tr.id) %>% 
+                                             dplyr::select(all_of(tissue.names)) %>% 
+                                             as.numeric()
+                                         }))
+  
+  return(tf.df)
+}
+
+plot_isoform_expression = function(tf.name, isof.ids, isof.category, selected.tissue.names, path.to.pdf) {
+  isoform.expression.df = compile_isoform_expression(isof.ids, isof.category, selected.tissue.names)
+  
+  p = isoform.expression.df %>% 
+    ggplot(aes(x = tissue,
+               y = expression_value, 
+               group = ensembl_transcript_id,
+               color = status)) +
+    geom_line() + 
+    scale_colour_manual(values = c("1" = "red", 
+                                   "2" = "blue",
+                                   "3" = "#FBDDE0", 
+                                   "4" = "#DFDEEE")) + 
+    ylim(c(0, NA)) + 
+    ggtitle(tf.name) +
+    xlab("") +
+    ylab("Expression (cross-tissue-normalized counts)") + 
+    theme_classic() + 
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+          legend.position = "none")
+  
+  ggsave(paste0(path.to.pdf, "/", tf.name, "_isoform_expression_sorted_all-expressed.pdf"),
+         p,
+         width = 15,
+         height = 6)
+}
+```
+
+Upload the data:
+
+```{r}
+broad.high.dbdminus.isoforms = readRDS("../../data/results/broad_high_dbdminus_isoforms_df.rds")
+
+tfs.med.isoforms = readRDS("../../data/results/gtex8_processed/tfs_selected_table_deseq2_selected_med_expr_cont.rds")
+
+tf.isoform.ndbds = read.delim("../../data/results/base_dbd_expression_analysis_table.tsv")
+
+tissue.names = readRDS("../../data/results/gtex8_processed/tissue_names.rds")
+
+path.to.pdf = "../../data/results"
+```
+
+Plot the expression profiles of all the obtained DBD- isoforms:
+
+```{r}
+selected.tf.names = broad.high.dbdminus.isoforms %>%
+  pull(humantfs_gene_name) %>%
+  unique()
+
+p.list = lapply(selected.tf.names,
+                function(tf.name) {
+                  gene.id = broad.high.dbdminus.isoforms %>%
+                    filter(humantfs_gene_name == tf.name) %>%
+                    pull(gene_id) %>%
+                    unique()
+                  
+                  selected.transcript.ids = broad.high.dbdminus.isoforms %>%
+                    filter(gene_id == gene.id) %>%
+                    pull(transcript_id) %>%
+                    unique()
+                  
+                  expressed.transcript.ids = tfs.med.isoforms %>%
+                    filter(gene_id == gene.id) %>%
+                    pull(transcript_id)
+                  
+                  isof.category = rep("regular", length(expressed.transcript.ids))
+                  
+                  isof.category[expressed.transcript.ids %in% selected.transcript.ids] = "main"
+                  
+                  plot_isoform_expression(tf.name, expressed.transcript.ids, isof.category, tissue.names, path.to.pdf)
+                })
+```
+
+## Functional annotation of particular higly and broadly expressed DBD- isoforms
+
+Print out domains of the alternative isoforms of manually selected TF genes:
+
+```{r}
+tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl = read.delim("../../data/results/tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl.tsv")
+
+domain_functional_classification = read.delim("../../data/results/Other_domains_manually_curated_filled_generalized.tsv")
+
+dbdminus.domain.table.per_function.annot = readRDS("../../data/results/dbdminus_domain_table_per_function_annot.rds")
+
+selected.tf.names = c("CUX1",
+                      "PRDM2",
+                      "MAZ",
+                      "FOXJ3",
+                      "CAMTA1",
+                      "THAP4",
+                      "ZNF621",
+                      "ZNF302",
+                      "ZNF197",
+                      "ZNF559")
+
+domain.annot.df = tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl %>%
+  dplyr::select(DBD,
+                humantfs_gene_name,
+                ensembl_gene_id,
+                ensembl_transcript_id,
+                ipr_accession,
+                domain_type) %>%
+  left_join(domain_functional_classification,
+            by = c("ipr_accession" = "ipr_accession")) %>%
+  filter(humantfs_gene_name %in% selected.tf.names) %>%
+  arrange(DBD,
+          humantfs_gene_name,
+          ensembl_gene_id,
+          ensembl_transcript_id,
+          ipr_accession) %>%
+  left_join(dbdminus.domain.table.per_function.annot %>%
+              dplyr::select(ensembl_transcript_id,
+                            general_function_list,
+                            isoform_function),
+            by = c("ensembl_transcript_id" = "ensembl_transcript_id"))
+```
+
+Re-generate isoform expression profiles for the selected TFs, labelling each isoform:
+
+```{r}
+plot_isoform_expression_labelled = function(tf.name, isof.ids, isof.category, selected.tissue.names, path.to.pdf) {
+  isoform.expression.df = compile_isoform_expression(isof.ids, isof.category, selected.tissue.names)
+  
+  p = isoform.expression.df %>% 
+    ggplot(aes(x = tissue,
+               y = expression_value, 
+               group = ensembl_transcript_id,
+               color = status)) +
+    geom_line() + 
+    geom_label_repel(aes(label = ensembl_transcript_id),
+                     nudge_x = 1) +
+    scale_colour_manual(values = c("1" = "red", 
+                                   "2" = "blue",
+                                   "3" = "#FBDDE0", 
+                                   "4" = "#DFDEEE")) + 
+    ylim(c(0, NA)) + 
+    ggtitle(tf.name) +
+    xlab("") +
+    ylab("Expression (cross-tissue-normalized counts)") + 
+    theme_classic() + 
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+          legend.position = "none")
+  
+  ggsave(paste0(path.to.pdf, "/", tf.name, "_isoform_expression_sorted_all-expressed_labelled.pdf"),
+         p,
+         width = 15,
+         height = 6)
+}
+
+p.list = lapply(selected.tf.names,
+                function(tf.name) {
+                  gene.id = broad.high.dbdminus.isoforms %>%
+                    filter(humantfs_gene_name == tf.name) %>%
+                    pull(gene_id) %>%
+                    unique()
+                  
+                  selected.transcript.ids = broad.high.dbdminus.isoforms %>%
+                    filter(gene_id == gene.id) %>%
+                    pull(transcript_id) %>%
+                    unique()
+                  
+                  expressed.transcript.ids = tfs.med.isoforms %>%
+                    filter(gene_id == gene.id) %>%
+                    pull(transcript_id)
+                  
+                  isof.category = rep("regular", length(expressed.transcript.ids))
+                  
+                  isof.category[expressed.transcript.ids %in% selected.transcript.ids] = "main"
+                  
+                  plot_isoform_expression_labelled(tf.name, 
+                                                   expressed.transcript.ids, 
+                                                   isof.category, 
+                                                   tissue.names, 
+                                                   path.to.pdf)
+                })
+```
+
+Consider the following interesting examples:
+
+1)  ZNF197: The highest expressed DBD+ isoform (ENST00000396058) contains ZFs, the KRAB and SCAN domains, while the highest expressed DBD- isoform (ENST00000383745) contains only the KRAB and SCAN domains. Twenty years ago, Li et al. discovered that this DBD- isoform (VHLaK) facilitates transcription repression via binding the VHL protein (Li et al., 2003: https://www.embopress.org/doi/full/10.1093/emboj/cdg173). Furthermore, our data show that VHLaK is upregulated in the brain. Consequently, this transcription repression mechanism, realised through VHL-VHLaK binding, may be stronger in the brain, as VHL is also expressed there, according to the GTEx v8 data. However, VHLaK may compete for corepressors with the DBD+ isoform of ZNF197 if they are coexpressed in the same cells, as these isoforms have the same KRAB domain. This competition may lead to re-balancing of transcription repression by the full (DBD+) isoform and by VHLaK, depending on the level of expression of VHL.
+
+2)  ZNF302: Both of the highest expressed DBD+ isoforms (ENST00000423823 and ENST00000457781) contain ZFs and a KRAB domain, while the highest expressed DBD- isoform (ENST00000505365) contains only the KRAB domain. Hence, if the DBD- isoform is coexpressed in the same cell with at least one of the DBD+ isoforms, the DBD- isoform may control (weaken) the transcription repression by the DBD+ isoforms (or any other repressor TFs that use the same corepressors) through sequestering corepressors from the chromatin. Alternatively, the mechanism of action of the DBD- isoform could be the same as in the case of ZNF197: namely, repressing transcription as a cofactor that binds DNA-bound TFs.
+
+3)  THAP4: The highest expressed DBD+ isoform (ENST00000407315), apart from a DBD, has a ligand-binding (heme-binding) domain, while the highest-expressed DBD- isoform (ENST00000402136) has only the ligand-binding domian. Consequently, the DBD- isoform may serve as a ligand-sequestering (specifically, heme-sequestering) factor, either altering the transcription regulation effect of the DBD+ isoform (if the two isoforms are coexpressed) or functioning on its own (sequestering heme from any other heme-binding molecules in the cell). Additionally, the previously studied process of conversion of peroxynitrite into nitrate by THAP4 (https://febs.onlinelibrary.wiley.com/doi/10.1002/2211-5463.12534) may be controlled by the expression levels of the two isoforms. For example, the fact that in skeletal muscles the expression level of the DBD- isoform is way below the level of the DBD+ isoform, while in the heart the expression levels of the two isoforms are much closer, may lead to differences in the peroxynitrite conversion in these two types of muscle tissue.
+
+4)  CAMTA1: The highest expressed DBD+ isoform (ENST00000303635), apart from a DBD, has a protein-binding (ankyrin repeat-containing) domain and a catalytic (NTPase) domain and is predominantly expressed in the brain. The expression pattern of the DBD+ isoform matches its known roles in episodic memory (https://academic.oup.com/hmg/article/16/12/1469/2356049), Purkinje cells survival and function (https://www.pnas.org/doi/epdf/10.1073/pnas.1411251111) and in gliobrastoma suppression (https://www.embopress.org/doi/full/10.1038/emboj.2011.301). In contrast, the highest expressed DBD- isoform (ENST00000473578) does not have any domains and consequently cannot be assigned a putative function in our analysis. As in non-brain tissues such as arteries, heart and skeletal muscles the DBD- isoform is expressed considerably higher than the DBD+ isoform, CAMTA1 effectively switches a TF (DBD+) isoform expressed in the brain for a domainless non-TF isoform expressed outside the brain, in these tissues. The DBD- isoform, if disordered, could bind DNA or, alternatively, RNA or proteins and in this way have a non-TF function which would be interesting to investigate experimentally.
+
+5)  FOXJ3: The highest expressed DBD+ isoform (ENST00000413440) does not, according to my domain annotation, have any other domains, apart from a DBD. The highest expressed DBD- isoform (ENST00000372571) is domainless. Interestingly, the DBD- isoform is major in the brain, tibial nerve, pituitary and some non-brain tissues, such as heart, liver and spleen. Consequently, in these tissues the TF function of FOXJ3 may be weakened (due to the fact that the DBD+ isoform is lower-expressed) and/or altered by the DBD- isoform (if the two isoforms are coexpressed). On the other hand, the DBD+ isoform is predominant in skeletal muscles, which matches its experimentally suggested role as a regulator of the skeletal muscle fiber cell identity and regeneration (https://www.sciencedirect.com/science/article/pii/S001216060901361X).
+
+## Find tissue-specific and highly expressed DBD- isoforms
+
+From the same bins 7-10 (containing highly expressed DBD- isoforms), take DBD- isoforms with the maximum tissue specificity in each bin:
+
+```{r}
+specific.high.dbdminus.isoforms = tfs.med.isoforms.ts.dbdtype.buff.binned %>%
+  filter(category == "DBD-") %>%
+  filter(buff_expr_bin %in% c(7, 8, 9, 10)) %>%
+  arrange(-buff_expr_bin,
+          -tissue_specificity) %>%
+  group_by(buff_expr_bin) %>%
+  slice(1) %>%
+  ungroup()
+```
+
+Manually add some DBD- isoforms from these bins with submaximum, but still very high, tissue specificity:
+
+```{r}
+specific.high.dbdminus.isoforms %<>%
+  bind_rows(tfs.med.isoforms.ts.dbdtype.buff.binned %>%
+              filter(transcript_id %in% c("ENST00000426947",
+                                          "ENST00000465084",
+                                          "ENST00000506456",
+                                          "ENST00000341900")))
+```
+
+Functionally annotate the obtained isoforms:
+
+```{r}
+dbdminus.domain.table.per_function.annot = readRDS("../../data/results/dbdminus_domain_table_per_function_annot.rds")
+
+specific.high.dbdminus.isoforms %<>%
+  left_join(dbdminus.domain.table.per_function.annot,
+            by = c("transcript_id" = "ensembl_transcript_id",
+                   "gene_id" = "ensembl_gene_id"))
+```
+
+Hence, we found
+
+```{r}
+specific.high.dbdminus.isoforms %>%
+  nrow()
+```
+
+highly expressed and highly tissue-specific DBD- isoforms produced by
+
+```{r}
+specific.high.dbdminus.isoforms %>%
+  pull(gene_id) %>%
+  unique() %>%
+  length()
+```
+
+TF genes.
+
+Plot the expression profiles of the obtained isoforms:
+
+```{r}
+selected.tf.names = specific.high.dbdminus.isoforms %>%
+  pull(humantfs_gene_name) %>%
+  unique()
+
+p.list = lapply(selected.tf.names,
+                function(tf.name) {
+                  gene.id = specific.high.dbdminus.isoforms %>%
+                    filter(humantfs_gene_name == tf.name) %>%
+                    pull(gene_id) %>%
+                    unique()
+                  
+                  selected.transcript.ids = specific.high.dbdminus.isoforms %>%
+                    filter(gene_id == gene.id) %>%
+                    pull(transcript_id) %>%
+                    unique()
+                  
+                  expressed.transcript.ids = tfs.med.isoforms %>%
+                    filter(gene_id == gene.id) %>%
+                    pull(transcript_id)
+                  
+                  isof.category = rep("regular", length(expressed.transcript.ids))
+                  
+                  isof.category[expressed.transcript.ids %in% selected.transcript.ids] = "main"
+                  
+                  plot_isoform_expression(tf.name, expressed.transcript.ids, isof.category, tissue.names, path.to.pdf)
+                })
+```

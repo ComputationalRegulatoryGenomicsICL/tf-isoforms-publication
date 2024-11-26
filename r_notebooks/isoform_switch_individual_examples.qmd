@@ -1,0 +1,613 @@
+---
+title: "Individual examples of switches"
+format: html
+editor: source
+---
+
+## Load libraries
+
+```{r}
+library(dplyr)
+library(magrittr)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+```
+
+## Define constants
+
+```{r}
+diff.cutoff = 0.2 # The minimum reciprocal difference between the expression levels of two major isoforms to call a switch between them.
+                  # This is a fraction of the expression level of the higher-expressed isoform.
+```
+
+## Define functions to plot switches
+
+Prepare general functions for drawing linear plots of TF isoform expression:
+
+```{r}
+compile_isoform_expression = function(tf.transcripts, isof.category, tissue.names, switch.summary.df) {
+  tf.df = data.frame(ensembl_transcript_id = rep(tf.transcripts, times = rep(length(tissue.names), length(tf.transcripts))))
+  
+  tf.df$status = unlist(lapply(tf.transcripts,
+                               function(tr.id) {
+                                 n_dbd = tf.isoform.ndbds %>%
+                                   filter(ensembl_transcript_id == tr.id) %>%
+                                   pull(n_dbd)
+                                 
+                                 tr.category = isof.category[tf.transcripts == tr.id]
+                                 
+                                 if (tr.category != "main") {
+                                   status = ifelse(n_dbd > 0, "5", "6")
+                                 } else {
+                                   expression_breadth = switch.summary.df %>% 
+                                     filter(ensembl_transcript_id == tr.id) %>%
+                                     pull(expression.breadth)
+                                   
+                                   status = ifelse(n_dbd > 0 & expression_breadth == "first",
+                                                   "3",
+                                                   ifelse(n_dbd > 0 & expression_breadth == "second",
+                                                          "1",
+                                                          ifelse(n_dbd == 0 & expression_breadth == "first",
+                                                                 "4",
+                                                                 "2")))
+                                 }
+                                 
+                                 return(rep(status, length(tissue.names)))
+                               }))
+  
+  tf.df$tissue = rep(tissue.names, length(tf.transcripts))
+  
+  tf.df$tissue = factor(tf.df$tissue, levels = tissue.names)
+  
+  tf.df$expression_value = unlist(lapply(tf.transcripts,
+                                         function(tr.id) {
+                                           isoform.expression.tf.annot.bin %>% 
+                                             filter(ensembl_transcript_id == tr.id) %>% 
+                                             dplyr::select(all_of(tissue.names)) %>% 
+                                             as.numeric()
+                                         }))
+  
+  return(tf.df)
+}
+
+plot_isoform_expression = function(tf.name, isof.ids, isof.category, selected.tissue.names, path.to.pdf, switch.summary.df) {
+  isoform.expression.df = compile_isoform_expression(isof.ids, isof.category, selected.tissue.names, switch.summary.df)
+  
+  switching.isof.ids = isoform.expression.df %>%
+    filter(status %in% c("1", "2", "3", "4")) %>%
+    pull(ensembl_transcript_id) %>%
+    unique()
+  
+  isof.id1 = switching.isof.ids[1]
+  
+  isof.id1.dbd.status = ifelse(unique(isoform.expression.df[isoform.expression.df$ensembl_transcript_id == isof.id1, "status"]) %in% c("1", "3"), "DBD+", "DBD-")
+  
+  isof.id2 = switching.isof.ids[2]
+  
+  isof.id2.dbd.status = ifelse(unique(isoform.expression.df[isoform.expression.df$ensembl_transcript_id == isof.id2, "status"]) %in% c("1", "3"), "DBD+", "DBD-")
+  
+  gene.id = tf.isoform.ndbds %>%
+    filter(humantfs_gene_name == tf.name) %>%
+    pull(ensembl_gene_id) %>%
+    unique()
+  
+  title.cluster.chunk = ifelse(cluster.number == "", "", paste0("cluster ", cluster.number))
+  
+  p = isoform.expression.df %>% 
+    ggplot(aes(x = tissue,
+               y = expression_value, 
+               group = ensembl_transcript_id,
+               color = status)) +
+    geom_line() + 
+    scale_colour_manual(values = c("1" = "red", 
+                                   "2" = "blue",
+                                   "3" = "darkred",
+                                   "4" = "darkblue",
+                                   "5" = "#FBDDE0", 
+                                   "6" = "#DFDEEE")) + 
+    ylim(c(0, NA)) + 
+    ggtitle(paste0(tf.name, " (", gene.id, "), ", 
+                   isof.id1, " (", isof.id1.dbd.status, ") vs ", 
+                   isof.id2, " (", isof.id2.dbd.status, "), ", 
+                   title.cluster.chunk, 
+                   " (", linkage.type, " linkage)")) +
+    xlab("") +
+    ylab("Expression (TPMs)") + 
+    theme_classic() + 
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+          legend.position = "none")
+  
+  cluster.chunk = ifelse(cluster.number == "", "", paste0("_cluster-", cluster.number))
+  
+  ggsave(paste0(path.to.pdf, "/", tf.name, "_switch_", isof.id1, "-", isof.id2, "_linkage-", linkage.type.filename, cluster.chunk, ".pdf"),
+         p,
+         width = 15,
+         height = 6)
+}
+
+plot_switches = function(selected.switches) {
+  p.list = lapply(selected.switches,
+                  function(switch.id) {
+                    tf.name = unlist(stringr::str_split(switch.id, "_"))[2]
+                    
+                    gene.id = unlist(stringr::str_split(switch.id, "_"))[1]
+                    
+                    isof.id1 = unlist(stringr::str_split(switch.id, "_"))[3]
+                    
+                    isof.id2 = unlist(stringr::str_split(switch.id, "_"))[4]
+                    
+                    selected.transcript.ids = c(isof.id1, isof.id2)
+                    
+                    expressed.transcript.ids = isoform.expression.tf.annot.bin %>%
+                      filter(ensembl_gene_id == gene.id) %>%
+                      pull(ensembl_transcript_id)
+                    
+                    isof.category = rep("regular", length(expressed.transcript.ids))
+                    
+                    isof.category[expressed.transcript.ids %in% selected.transcript.ids] = "main"
+                    
+                    tissue.list1.str = isoform.switch.master.table.annot.with_functions %>%
+                      filter(ensembl_transcript_id1 == isof.id1) %>%
+                      filter(ensembl_transcript_id2 == isof.id2) %>%
+                      pull(tissue_list1)
+                    
+                    tissue.list1 = unlist(stringr::str_split(tissue.list1.str, fixed(",")))
+                    
+                    tissue.list2.str = isoform.switch.master.table.annot.with_functions %>%
+                      filter(ensembl_transcript_id1 == isof.id1) %>%
+                      filter(ensembl_transcript_id2 == isof.id2) %>%
+                      pull(tissue_list2)
+                    
+                    tissue.list2 = unlist(stringr::str_split(tissue.list2.str, fixed(",")))
+                    
+                    switching.tissue.names = unique(sort(c(tissue.list1, tissue.list2)))
+                    
+                    selected.tissue.names = tissues.ordered[tissues.ordered %in% switching.tissue.names]
+                    
+                    switch.summary.df = data.frame(ensembl_transcript_id = c(isof.id1, isof.id2),
+                                                   expression.breadth = ifelse(rep(length(tissue.list1) >= length(tissue.list2), 2),
+                                                                               c("first", "second"),
+                                                                               c("second", "first")))
+                    
+                    plot_isoform_expression(tf.name, expressed.transcript.ids, isof.category, selected.tissue.names, path.to.pdf, switch.summary.df)
+                  })
+  
+  return(p.list)
+}
+```
+
+## Upload the data to plot switches
+
+Upload the data:
+
+```{r}
+isoform.switch.master.table.annot.with_functions = read.delim("../../data/results/isoform_switch_master_table_annot_with_functions.tsv",
+                                                              header = T,
+                                                              sep = "\t")
+
+cluster.annot.df.complete = read.delim("../../data/results/gene_cluster_annotation_method-complete.tsv",
+                                       header = T,
+                                       sep = "\t")
+
+cluster.annot.df.wardd2 = read.delim("../../data/results/gene_cluster_annotation_method-wardd2.tsv",
+                                     header = T,
+                                     sep = "\t")
+
+isoform.expression.tf.annot.bin = readRDS("../../data/results/gtex8_processed/tfs_selected_samples_tpm_whole_med_by_tissue_dumped_named.rds")
+
+tf.isoform.ndbds = read.delim("../../data/results/base_dbd_expression_analysis_table.tsv")
+
+tissue.names = readRDS("../../data/results/gtex8_processed/tissue_names.rds")
+
+path.to.pdf = "../../data/results"
+```
+
+## Plot switches from the complete linkage cluster 5 (DBD+/DBD-) and Ward's D2 linkage cluster 3 (DBD+/DBD+)
+
+Plot switches from the complete linkage cluster 5 (DBD- in the brain, DBD+ outside the brain):
+
+```{r}
+linkage.type = "complete"
+
+linkage.type.filename = "complete"
+
+tissues.ordered.complete = c("Testis",
+                             "Muscle - Skeletal",
+                             "Heart - Atrial Appendage",
+                             "Heart - Left Ventricle",
+                             "Brain - Cerebellum",
+                             "Brain - Spinal cord (cervical c-1)",
+                             "Brain - Substantia nigra",
+                             "Brain - Cortex",
+                             "Brain - Anterior cingulate cortex (BA24)",
+                             "Brain - Caudate (basal ganglia)",
+                             "Brain - Nucleus accumbens (basal ganglia)",
+                             "Brain - Hypothalamus",
+                             "Brain - Amygdala",
+                             "Brain - Hippocampus",
+                             "Brain - Putamen (basal ganglia)",
+                             "Adipose - Visceral (Omentum)",
+                             "Adipose - Subcutaneous",
+                             "Breast - Mammary Tissue",
+                             "Ovary",
+                             "Nerve - Tibial",
+                             "Uterus",
+                             "Artery - Tibial",
+                             "Artery - Aorta",
+                             "Artery - Coronary",
+                             "Skin - Not Sun Exposed (Suprapubic)",
+                             "Skin - Sun Exposed (Lower leg)",
+                             "Minor Salivary Gland",
+                             "Esophagus - Mucosa",
+                             "Vagina",
+                             "Lung",
+                             "Thyroid",
+                             "Prostate",
+                             "Colon - Sigmoid",
+                             "Esophagus - Gastroesophageal Junction",
+                             "Esophagus - Muscularis",
+                             "Pituitary",
+                             "Liver",
+                             "Spleen",
+                             "Adrenal Gland",
+                             "Pancreas",
+                             "Stomach",
+                             "Colon - Transverse",
+                             "Small Intestine - Terminal Ileum")
+
+cluster.number = 5
+
+selected.switches = cluster.annot.df.complete %>%
+  filter(cluster_number == cluster.number) %>%
+  pull(switch_id)
+
+tissues.ordered = tissues.ordered.complete
+
+p.list = plot_switches(selected.switches)
+```
+
+1) THAP4 (main figure): UniProtKB: "Heme-binding protein able to scavenge peroxynitrite and to protect free L-tyrosine against peroxynitrite-mediated nitration, by acting as a peroxynitrite isomerase that converts peroxynitrite to nitrate. Therefore, this protein likely plays a role in peroxynitrite sensing and in the detoxification of reactive nitrogen and oxygen species (RNS and ROS, respectively). Is able to bind nitric oxide (NO) in vitro, but may act as a sensor of peroxynitrite levels in vivo, possibly modulating the transcriptional activity residing in the N-terminal region." [https://www.uniprot.org/uniprotkb/Q8WY91/entry] See: https://febs.onlinelibrary.wiley.com/doi/10.1002/2211-5463.12534 ; https://www.liebertpub.com/doi/10.1089/ars.2019.7874?url_ver=Z39.88-2003&rfr_id=ori%3Arid%3Acrossref.org&rfr_dat=cr_pub++0pubmed Nothing about functions of its isoforms in literature.
+
+The major DBD+ isoform (ENST00000407315), apart from a DBD, has a ligand-binding (heme-binding) domain, while the major DBD- isoform (ENST00000402136) has only the ligand-binding domain. Consequently, the DBD- isoform may serve as a ligand-sequestering (specifically, heme-sequestering) factor, either altering the transcription regulation effect of the DBD+ isoform (if the two isoforms are coexpressed in the same cells) or functioning on its own (sequestering heme from any other heme-binding molecules in the cell). Additionally, the previously studied process of conversion of peroxynitrite into nitrate by THAP4 (https://febs.onlinelibrary.wiley.com/doi/10.1002/2211-5463.12534) may be controlled by the expression levels of the two isoforms.
+
+2) ZNF470 (main figure): UniProtKB: Nothing specific. Literature: May regulate chondrogenesis (https://linkinghub.elsevier.com/retrieve/pii/S001448270400309X). Nothing about functions of its isoforms in literature. The DBD- isoform contains only a KRAB domain (transcription repression), while the DBD+ isoform contains the KRAB domain along with an array of C2H2 zinc fingers. Consequently, the DBD- isoform could sequester corepressors from the chromatin in the brain, in this way attenuating or abolishing the repression of ZNF470 target genes. In contrast, the major DBD+ isoform of ZNF470 outside the brain could still repress transcription in the non-brain tissues.
+
+3) ZNF571 (Fig. S6): UniProtKB: Nothing specific, and nothing about this TF or its isoforms in the literature. Interpretation of the switch: same as for ZNF470.
+
+4) ZNF530 (Fig. S6): UniProtKB: Nothing specific, and nothing about the role of this TF or its isoforms in the normal human physiology. Interpretation of the switch: same as for ZNF470.
+
+5) ZNF568 (Fig. S6): UniProtKB: "Has transcriptional repression activity, partially through the recruitment of the corepressor TRIM28 but has also repression activity independently of this interaction. Essential during embryonic development, where it acts as direct repressor of a placental-specific transcript of IGF2 in early development and regulates convergent extension movements required for axis elongation and tissue morphogenesis in all germ layers. Also important for normal morphogenesis of extraembryonic tissues including the yolk sac, extraembryonic mesoderm and placenta. May enhance proliferation or maintenance of neural stem cells." (By similarity) [https://www.uniprot.org/uniprotkb/Q3ZCX4/entry]
+
+"ZFP568 regulates convergent extension and extraembryonic tissue morphogenesis during gastrulation (García-García et al., 2008, Shibata et al., 2011, Shibata and García-García, 2011) and is a direct repressor of a placental-specific transcript of insulin-like growth factor 2 (called Igf2-P0) in early mouse development (Yang et al., 2017)" (https://www.sciencedirect.com/science/article/pii/S0092867418302356).
+
+"We demonstrate, by a gene-targeting approach in mice, that this gene is functionally involved in the maintenance/self-renewal of NSCs and regulation of the fetal brain size" (https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0047481).
+
+Interpretation of the switch: same as for ZNF470.
+
+Plot switches from the Ward's D2 linkage cluster 3 (one DBD+ in the brain, another DBD+ outside the brain):
+
+```{r}
+linkage.type = "Ward's D2"
+
+linkage.type.filename = "wardd2"
+
+tissues.ordered.wardd2 = c("Brain - Cerebellum",
+                           "Brain - Cortex",
+                           "Brain - Anterior cingulate cortex (BA24)",
+                           "Brain - Caudate (basal ganglia)",
+                           "Brain - Nucleus accumbens (basal ganglia)",
+                           "Brain - Amygdala",
+                           "Brain - Hippocampus",
+                           "Brain - Putamen (basal ganglia)",
+                           "Brain - Spinal cord (cervical c-1)",
+                           "Brain - Hypothalamus",
+                           "Brain - Substantia nigra",
+                           "Testis",
+                           "Skin - Not Sun Exposed (Suprapubic)",
+                           "Skin - Sun Exposed (Lower leg)",
+                           "Adipose - Visceral (Omentum)",
+                           "Adipose - Subcutaneous",
+                           "Breast - Mammary Tissue",
+                           "Prostate",
+                           "Colon - Sigmoid",
+                           "Esophagus - Gastroesophageal Junction",
+                           "Esophagus - Muscularis",
+                           "Nerve - Tibial",
+                           "Lung",
+                           "Thyroid",
+                           "Artery - Tibial",
+                           "Artery - Aorta",
+                           "Artery - Coronary",
+                           "Ovary",
+                           "Uterus",
+                           "Muscle - Skeletal",
+                           "Heart - Atrial Appendage",
+                           "Heart - Left Ventricle",
+                           "Pituitary",
+                           "Liver",
+                           "Spleen",
+                           "Colon - Transverse",
+                           "Small Intestine - Terminal Ileum",
+                           "Minor Salivary Gland",
+                           "Esophagus - Mucosa",
+                           "Vagina",
+                           "Adrenal Gland",
+                           "Pancreas",
+                           "Stomach")
+
+cluster.number = 3
+
+selected.switches = cluster.annot.df.wardd2 %>%
+  filter(cluster_number == cluster.number) %>%
+  pull(switch_id)
+
+tissues.ordered = tissues.ordered.wardd2
+
+p.list = plot_switches(selected.switches)
+```
+
+<!-- ADNP - double-check that it is present in the tables. Characterise. -->
+
+1) ZNF529: 
+
+UniProtKB: Nothing specific. 
+
+Literature: Important in lipid metabolism (https://www.nature.com/articles/s41467-020-20086-3). 
+
+Switch interpretation: Repressor outside the brain but a putative activator in the brain. 
+
+Mechanism: The isoform that dominates outside the brain contains a KRAB domain, while the isoform dominating in the brain does not have the KRAB domain and hence cannot repress the transcription of the same target genes (Fig. 1E).
+
+2) CEBPG:
+
+UniProtKB: According to its known binding pattern, may regulate IL-4, the immunoglobulin heavy chain and the G-CSF gene.
+
+Literature: "CEBPG is a truncated isoform of the CEBP family of transcription factors and can bind to DNA but not transactivate by itself. It participates in transcriptional regulation by forming heterodimers with other CEBP family members ( 50–53 )" (https://academic.oup.com/carcin/article/28/12/2552/2476542#85895119). Along with other TFs it regulates transcription of ECRR5, "a key DNA repair gene" (https://academic.oup.com/carcin/article/28/12/2552/2476542#85895119). "The senescence-suppressing activity of C/EBPγ required its ability to heterodimerize with C/EBPβ. [...] The proliferative functions of C/EBPγ are not restricted to fibroblasts, as hematopoietic progenitors from Cebpg−/− bone marrow also displayed impaired growth" (https://www.tandfonline.com/doi/full/10.1128/MCB.01674-12). Regulates cellular stress response via heterodimerisation with ATF4: "Our findings identify C/EBPγ as a novel antioxidant regulator and an obligatory ATF4 partner that controls redox homeostasis in normal and cancerous cells" (https://www.tandfonline.com/doi/full/10.1128/MCB.00911-15). Regulates mast cell development and function (https://www.exphem.org/article/S0301-472X(17)30444-7/fulltext), natural killer cells function (https://ashpublications.org/blood/article/132/Supplement%201/3721/265334). "C/EBPγ is ubiquitously expressed in hematopoietic cells,76 and despite lacking transactivation domains, it has been reported that C/EBPγ controls gene regulation by dimerizing with other transcription factors 9,8" (https://haematologica.org/article/view/8563).
+
+Switch interpretation: Protein sequence is the same; the difference is in the 5'-UTRs (http://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000153879;r=19:33373685-33382686), which means that the two mRNA isoforms may differ by the stability or translational efficiency (https://www.nature.com/articles/s41594-020-0465-x ; https://www.nature.com/articles/s41588-021-00830-1).
+
+Mechanism: Alternative promoter usage (http://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000153879;r=19:33373685-33382686).
+
+3) ZBTB45:
+
+UniProtKB: "In the central nervous system, may play a role in glial cell differentiation (By similarity)."
+
+Literature: Regulates glial differentiation (https://www.tandfonline.com/doi/full/10.4161/cc.9.24.14154), which is very relevant for any brain-non-brain differences in expression, and likely regulates apoptosis (https://faseb.onlinelibrary.wiley.com/doi/abs/10.1096/fasebj.25.1_supplement.lb44 ; https://www.oncotarget.com/article/27935/text/).
+
+Switch interpretation: Protein sequence is the same; the difference is in the 5'-UTRs (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000119574;r=19:58513530-58519554), which means that the two mRNA isoforms may differ by the stability, translational efficiency or cellular localisation (https://www.annualreviews.org/doi/10.1146/annurev-genet-120116-024704).
+
+Mechanism: Alternative splicing and alternative TSSs (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000119574;r=19:58513530-58519554).
+
+4) ZNF415:
+
+UniProtKB: "Involved in transcriptional regulation. Transcriptional activity differed among the various isoforms. All isoforms except isoform 3 seem to suppresses the transcriptional activities of AP-1 and p53/TP53" (https://www.uniprot.org/uniprotkb/Q09FC8/entry).
+
+Literature: ZNF415 has 5 protein isoforms with different cellular localisation and transcription regulation effects (https://www.sciencedirect.com/science/article/pii/S0006291X06021887): "ZNF415-1 encodes 11 different C2H2 type zinc fingers, the other isoforms contain a linker region that normally joins the KRAB box to the region coding for the 11 zinc fingers, and finally ZNF415-5 also contains a KRAB A box. [...] The ZNF415-1 protein is localized in the nucleus while the other isoforms are localized in both the nucleus and cytoplasm. Five isoforms fused to the GAL4 DNA-binding display different transcription activity suggesting that splicing may influence the function of ZNF415 isoforms. All the isoforms except ZNF415-1 can inhibit AP-1 and p53 activity. [...] Thus, by regulating activity of these transcription factors, ZNF415 might also play a role in cell cycle control or apoptosis. [...] All five isoforms are expressed in both embryonic and adult tissues but exhibit different levels of expression. ZNF415-1 and ZNF415[-5] are high in both embryo and adult [including adult cerebellum and cerebrum], ZNF415-2 and 4 both have a moderate level of expression, while ZNF415-3 has the lowest level in the tissues examined (Fig. 1B and 1C). This suggests that the five isoforms may perform different roles." (https://www.sciencedirect.com/science/article/pii/S0006291X06021887).
+
+Switch interpretation: Isoform ENST00000243643 corresponds to ZNF415-5 which was the only one with a KRAB domain. It localised to both the cytoplasm and the nucleus. Isoform ENST00000601493 corresponds to ZNF415-1, based on the shape of the last exon and the total number of exons. This isoform contains only the C2H2 ZF array and was the only one which localised strictly to the nucleus. Therefore, according to our data, ZNF415 switches a major isoform ZNF415-1 (ENST00000601493) that dominates in the brain, localises to the nucleus and contains only the DBD (C2H2 ZF) array for a major isoform ZNF415-5 (ENST00000243643) that dominates outside the brain, localises both to the cytoplasm and the nucleus and has both the C2H2 ZF array and the repressive KRAB domain. Consequently, ZNF415 protein product could mainly repress transcription outside the brain but activate transcription (or, at least attenuate the repression of transcription of the same target genes) within the brain (Fig. 1E). This interpretation exactly matches what is known about isoforms ZNF415-5 (which represses TP53 and AP-1) and isoform ZNF415-1 (which fails to do so) (https://www.sciencedirect.com/science/article/pii/S0006291X06021887).
+
+Mechanism: Alternative splicing (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000170954;r=19:53107879-53133077).
+
+5) ZNF202:
+
+UniProtKB: "Transcriptional repressor that binds to elements found predominantly in genes that participate in lipid metabolism. Among its targets are structural components of lipoprotein particles (apolipoproteins AIV, CIII, and E), enzymes involved in lipid processing (lipoprotein lipase, lecithin cholesteryl ester transferase), transporters involved in lipid homeostasis (ABCA1, ABCG1), and several genes involved in processes related to energy metabolism and vascular disease."
+
+Literature: Known isoforms: "two common splice variants in the coding region named ZNF202m1 and ZNF202m3 (Fig.1 A). The full-length m1 form (ZNF202m1) encodes a predicted 648 amino acid protein with several conserved domains. The C terminus encodes eight consecutive C2H2 zinc finger motifs; the first, second, seventh, and eighth C2H2 motifs show significantly higher similarity to C2H2 fingers known to bind DNA than do fingers three through six (14.). The central part of the protein is occupied by a Krueppel-associated box (KRAB). [...] The N terminus contains a SCAN (or LeR) motif, a suggested protein interaction module, observed in other zinc finger proteins (18.). Further analysis of the protein sequence by PESTFIND (19.) reveals extensive PEST sequences that suggest a rapid protein turnover, similar to that observed for several other transcription factors. The conceptual translation (GenBank™ accession AF027218) of the second common splice form, m3 (ZNF202m3), predicted a N-terminal-truncated protein that retains the KRAB domain and the eight C-terminal zinc finger motifs. However, expression of a ZNF202 m3 cDNA revealed that the m3 form encodes a truncated ZNF202 protein of 142 amino acids encompassing only the SCAN domain" (https://www.jbc.org/article/S0021-9258(19)80349-6/fulltext). The full-length m1 isoform of ZNF202 is a transcription repressor (as expected, based on the presence of the KRAB domain) (https://www.jbc.org/article/S0021-9258(19)80349-6/fulltext); ZNF202 regulates lipid metabolism (https://www.jbc.org/article/S0021-9258(19)80349-6/fulltext ; https://www.jlr.org/article/S0022-2275(20)31142-1/fulltext ; https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0057492). "The role of the SCAN-encoding ZNF202 isoform m3 and ZNF191 remains unclear. ZNF202m3 may impair repressional activity of the ZNF202 full-length form by modulating the formation of functional SCAN domain zinc finger transcription factors that are able to bind KAP-1" (https://journals.lww.com/co-lipidology/Fulltext/2004/04000/Apolipoprotein_E_and_atherosclerosis.13.aspx).
+
+Switch interpretation: Isoform ENST00000336139 is dominant in the brain, while isoform ENST00000529691 is dominant outside the brain. These isoforms differ only in UTRs (both 5' and 3', and both UTRs of isoform ENST00000529691 are shorter than the corresponding UTRs of the brain-dominant isoform ENST00000336139), which means that the corresponding mRNA isoforms may differ by the stability, translational efficiency or cellular localisation (https://www.nature.com/articles/s41594-020-0465-x ; https://www.nature.com/articles/s41588-021-00830-1 ; https://www.annualreviews.org/doi/10.1146/annurev-genet-120116-024704). Additionally, the two protein isoforms translated from the two switching major mRNA isoforms may differ by their protein-protein interactions if the two 3'-UTRs bind different proteins that get cotranslationally transferred onto the nascent peptides (https://www.annualreviews.org/doi/10.1146/annurev-genet-120116-024704). Also, the two protein isoforms may differ in their cellular localisation due to putative 3'-UTR-induced differential protein-protein interactions (https://www.annualreviews.org/doi/10.1146/annurev-genet-120116-024704).
+
+Mechanism: Alternative splicing changes the 5'-UTR, while an alternative termination site leads to different lengths of the 3'-UTRs (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000166261;r=11:123723914-123741675).
+
+6) ZBTB21:
+
+UniProtKB: "Acts as a transcription repressor" (https://www.uniprot.org/uniprotkb/Q9ULJ3/entry).
+
+Literature: ZBTB21 is a transcription repressor with two isoforms (ZNF295L and ZNF295S, according to the original gene name) differing by an intraexonic splicing event leading to the differential inclusion of a part of a C2H2 ZF array (https://www.sciencedirect.com/science/article/pii/S0006291X04028141). This is exactly the event that produces the two switching isoforms (see below). Due to the presence of the dimerisation domain, the two isoforms could form homo- and heterodimers; both isoforms localise to the nucleus (https://www.sciencedirect.com/science/article/pii/S0006291X04028141). "knockdown experiments showed that Zbtb21 [in cooperation with Zbtb14] is required for the formation of posterior neural tissue and the suppression of anterior neural development" (https://www.sciencedirect.com/science/article/pii/S0006291X22013043). The authors identified only the long isoform in Xenopus (https://www.sciencedirect.com/science/article/pii/S0006291X22013043). ZBTB21, like several other ZBTB factors, facilitates cohesin-DNA binding and in this way represents a chromatin interaction regulator (https://academic.oup.com/nar/article/51/13/6784/7188756).
+
+Switch interpretation: Isoform ENST00000398505 dominates in the brain, while isoform ENST00000310826 dominates outside the brain. The C2H2 ZF array of the brain-dominating isoform is shorter, than the array of the other isoform. Therefore, the DNA binding specificity of ZBTB21 within and outside the brain may be different, leading to the preferrential control of different target genes. Preferrential here means that the sets of targets could be different (although may in principle intersect) if the isoforms are not co-expressed in the same cells, or the target set could be the same but different gene subsets of this set could be regulated differently, depending on which of the two co-expressed isoforms dominates. Of note, the brain-dominating isoform could be unable to bind DNA at all if the remaining ZFs are not enough for that or are not actually DNA-binding. In that case, the brain-dominating isoform could be a sequestration factor, attenuating the binding of the full isoform to DNA (if they are co-expressed) with its BTB/POZ dimerisation domain. Finally, if the brain-dominating isoform cannot bind DNA, and the two isoforms are not co-expressed, than in the brain ZBTB21 is not a TF but a possible sequestration factor for other proteins that could dimerise with it.
+
+Mechanism: Alternative splicing of a coding exon (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000173276;r=21:41986831-42010387).
+
+7) ZNF500:
+
+UniProtKB: Nothing specific.
+
+Literature: The role of this TF gene in normal physiology is not known. However, (https://onlinelibrary.wiley.com/doi/full/10.1111/cas.15947) have shown that ZNF500 binds p53 through one of its C2H2 ZF domains interacting with the C terminal region of p53. They also showed that the overexpression of ZNF500 upregulates p53, p21 and E2F4 and decreases the ubiquitination of p53, and that these effects depend on the presence of the C2H2 ZF array in ZNF500. The authors do not probe different isoforms of ZNF500.
+
+Switch interpretation: Isoform ENST00000219478 dominates in the brain, while isoform ENST00000545009 dominates outside the brain. The isoforms differ by one C2H2 ZF (one more ZF in the brain-dominating isoform), which may lead to differential DNA-binding affinity and, consequently, to differential transcription regulation between the brain and non-brain tissues. According to the gene annotation, the two isoforms also differ in their UTRs, especially the 3'-UTR which is much longer in the brain-dominating isoform. This, in turn, potentially opens up a vast range of options for the differential regulation of the stability, translation efficiency and cellular localisation of the two isoforms. Alternatively, it is tempting to speculate that the differentially included C2H2 ZF could be the p53-binding domain (or, at least, of of them). In that case, the switch exchanges a p53-binding (and hence, p53 protective) isoform of ZNF500 that dominates in the brain for a p53-unbound isoform dominating outside the brain and not protecting p53 from ubiquitination and subsequent degradation. Additionally, if the two isoforms are co-expressed, then their expression levels could regulate the degradation rate of p53, predicting a slower degradation rate in the brain and a faster rate outside the brain (although this would also depend on the absolute expression levels of the two isoforms which I need to check using the DESeq2 cross-tissue-normalised data). Finally, in case of coexpression, the two isoforms could form homo- and hetero-oligomers via their SCAN domains, in this way further regulating the p53 binding and, consequently, degradation rate.
+
+Mechanism: An alternative TSS and an alternative transcription termination sites produce the different UTRs, while an intraexonic alternative splicing must be excluding one C2H2 ZF domain (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000103199;r=16:4748239-4767624).
+
+8) ZNF384:
+
+UniProtKB: "Transcription factor that binds the consensus DNA sequence [GC]AAAAA. Seems to bind and regulate the promoters of MMP1, MMP3, MMP7 and COL1A1 (By similarity)" (https://www.uniprot.org/uniprotkb/Q8TF68/entry).
+
+Literature: ZNF384 is a nucleocytoplasmic shuttling protein which, as a TF, regulates metalloproteinases that degrade extracellular matrix. ZNF384 binds the SH3 domain of p130cas  (https://www.tandfonline.com/doi/full/10.1128/MCB.20.5.1649-1658.2000). p130cas is a well-established intracellular signalling regulator involved in cell motility (https://www.sciencedirect.com/science/article/pii/S0962892406000833).
+
+Switch interpretation: Isoform ENST00000319770 dominates in the brain, while isoform ENST00000355772 dominates outside the brain. Both isoforms have 5 C2H2 ZF domains, while isoforms of this TF gene can have, in general, from 5 to 8 ZFs (https://www.sciencedirect.com/science/article/pii/S002192581935776X). The proteins encoded by the two isoforms are different but the difference lies outside the domains (C2H2 ZFs). Specifically, the brain-dominating isoform is 55 aa longer than the non-brain-dominating one:
+
+```{r}
+tmp.df = isoform.switch.master.table.annot.with_functions %>%
+  filter(ensembl_transcript_id1 == "ENST00000319770" &
+         ensembl_transcript_id2 == "ENST00000355772")
+
+cat("ENST00000319770 protein length =", nchar(tmp.df %>% pull(protein_sequence1)), "\n")
+
+cat("ENST00000355772 protein length =", nchar(tmp.df %>% pull(protein_sequence2)), "\n")
+
+cat("Difference: ", nchar(tmp.df %>% pull(protein_sequence1)) - nchar(tmp.df %>% pull(protein_sequence2)), "aa\n")
+```
+
+Therefore, in the brain the higher proportion of the ZNF384 proteins may be bound by other proteins or RNAs, as the longer isoform is the brain-dominating one and disordered regions of proteins are avid binders. Although we do not have a SH3 domain annotated in the switching isoforms, it is tempting to speculate that the difference between the isoforms may affect this domain and, consequently, ZNF384-p130cas binding, with a modulation of cell motility as a result.
+
+Additionally, the brain-dominating isoform has longer UTRs (both of them), which suggests more options for the regulation of its stability, translational efficiency or cellular localisation.
+
+Mechanism: Alternative splicing excludes one exon from the non-brain-dominating isoform, in comparison to the brain-dominating one, and also shortens the 5'-UTR. Additionally, the 3'-UTR in the non-brain-dominating isoform is shorter (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000126746;r=12:6666477-6689572).
+
+9) ZNF180:
+
+UniProtKB: Nothing specific.
+
+Literature: Nothing about its functions or isoforms.
+
+Switch interpretation: Isoform ENST00000221327 dominates in the brain (excluding the cerebellum) and in liver, while isoform ENST00000592529 dominates outside the brain and in the cerebellum. The two isoforms have the same set of domains (a KRAB domain and 12 C2H2 ZF domains) but their protein sequences are different. Therefore, the difference lies between the domains or at the N or C terminus and may affect the DNA, RNA or protein binding of the two isoforms, as disordered regions of proteins are known to be avid binders. Additionally, the brain-dominating isoform has a longer 3'-UTR, which likely gives more options for the regulation of its stability, translational efficiency or cellular localisation (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000167384;r=19:44474428-44500524).
+
+Mechanism: The difference in the coding sequence should be due to the alternative splicing of the coding sequence of the first exon (a small starting portion of the coding sequence is included in the brain-dominating isoform but excluded in the non-brain-dominating one). Also, alternative transcription termination sites lead to the different lengths of the 3'-UTRs of the two isoforms (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000167384;r=19:44474428-44500524).
+
+10) SETDB2:
+
+UniProtKB: "Histone methyltransferase involved in left-right axis specification in early development and mitosis. Specifically trimethylates 'Lys-9' of histone H3 (H3K9me3). H3K9me3 is a specific tag for epigenetic transcriptional repression that recruits HP1 (CBX1, CBX3 and/or CBX5) proteins to methylated histones. Contributes to H3K9me3 in both the interspersed repetitive elements and centromere-associated repeats. Plays a role in chromosome condensation and segregation during mitosis" (https://www.uniprot.org/uniprotkb/Q96T68/entry).
+
+Literature: Nothing about its isoforms.
+
+Switch interpretation: Isoform ENST00000317257 dominates in the brain and in the heart and testis, while isoform ENST00000354234 dominates outside the brain. The two isoforms have the same set of domains (a SET domain, a pre-SET domain and a DBD) but their protein sequences are different. Therefore, the difference lies between the domains or at the N or C terminus and may affect the DNA, RNA or protein binding of the two isoforms, as disordered regions of proteins are known to be avid binders. Additionally, the brain-dominating isoform has a shorter 5'-UTR; therefore, the two mRNA isoforms may be different with respect to their stability, translational efficiency or cellular localisation (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000136169;r=13:49444374-49495003). Because SETDB2 is an H3K9 methyltransferase, the dominance of its different isoforms within and outside the brain may differentially affect the deposition of the H3K9me3 histone mark.
+
+Mechanism: Alternative promoter usage leads to the transcription of a longer 5'-UTR (for the non-brain-dominating isoform) or a shorter one (for the brain-dominating isoform) which is a subsequence of the longer one. Additionally, the difference between the coding regions emerges due to the alternative splicing of a whole coding exon (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000136169;r=13:49444374-49495003).
+
+11) ZNF592:
+
+UniProtKB: Nothing specific.
+
+Literature: Involved in the cerebellar development (https://www.nature.com/articles/ejhg201082).
+
+Switch interpretation: Isoform ENST00000299927 dominates in some brain subtissues, as well as in the liver, pancreas and spleen, while isoform ENST00000560079 dominates in many tissues outside the brain. The two isoforms are different only in UTRs: the non-brain dominating isoform has the 5'-UTR while the brain-dominating one does not (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000166716;r=15:84748592-84806445). This may allow for a differential regulation of the stability, translational efficiency or cellular localisation of the two isoforms. The fact that there is no switch in the cerebellum means that the two isoforms are tightly coexpressed in this brain compartment.
+
+Mechanism: Alternative promoter usage leads to the presence (in the non-brain-dominating isoform) or absence (in the brain-dominating isoform) of the 5'-UTR (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000166716;r=15:84748592-84806445).
+
+12) ZNF605:
+
+UniProtKB: Nothing specific.
+
+Literature: May play a role in the development of hypothalamus but that this was inferred in a cow model (https://academic.oup.com/jas/article/94/9/3693/4701710).
+
+Switch interpretation: Isoform ENST00000360187 dominates in the brain, as well as in ovary, pancreas and testis, while isoform ENST00000392321 dominates in many tissues outside the brain. The two isoforms have different KRAB domain sequences and, consequently, could exert transcription repression at different levels (Fig. 1G) or upon different targets (Fig. 1E, if extrapolated to transcription repression). The two isoforms are coexpressed much closer outside the brain (while still switching) than in the brain. Therefore, if the two isoforms are coexpressed in the same cells, then they could regulate each other, producing a combined activity, outside the brain, while in the brain the effect of the brain-dominant isoform may define the gene activity. Additionally, the brain-dominating isoform has longer UTRs which may offer more options for the regulation of its stability, translational efficiency and cellular localisation (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000196458;r=12:132918306-132956306).
+
+Mechanism: Alternative splicing of a coding exon must be the reason for the difference between the KRAB sequences of the two isoforms (the exon is not included in the brain-dominating isoform). Additionally, the brain-dominating isoform has a longer 5'-UTR (due to the splicing-in of an additional non-coding exon) and a longer 3'-UTR (due to the usage of an alternative transcription termination site). See https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000196458;r=12:132918306-132956306 .
+
+13) ZC3H8:
+
+UniProtKB: "Acts as a transcriptional repressor of the GATA3 promoter. Sequence-specific DNA-binding factor that binds to the 5'-AGGTCTC-3' sequence within the negative cis-acting element intronic regulatory region (IRR) of the GATA3 gene (By similarity). Component of the little elongation complex (LEC), a complex required to regulate small nuclear RNA (snRNA) gene transcription by RNA polymerase II and III (PubMed:23932780). Induces thymocyte apoptosis when overexpressed, which may indicate a role in regulation of thymocyte homeostasis" (https://www.uniprot.org/uniprotkb/Q8N5P1/entry).
+
+Literature: May be involved in broad spectrum of molecular processes, however, its particular functions are unclear (https://www.proquest.com/docview/2087754098?pq-origsite=gscholar&fromopenview=true). It associates with PML and Cajal bodies, is a known oncogene and may regulate cell proliferation and motility (https://aacrjournals.org/cancerres/article/77/13_Supplement/2555/618023/Abstract-2555-ZC3H8-associates-with-PML-bodies-and ; https://aacrjournals.org/cancerres/article/79/13_Supplement/1713/633893 ; https://link.springer.com/article/10.1186/s12885-018-4674-1), as well as inhibit DNA double-strand break repair (https://aacrjournals.org/cancerres/article/79/13_Supplement/1713/633893 ; https://faseb.onlinelibrary.wiley.com/doi/10.1096/fasebj.2022.36.S1.00R97).
+
+Switch interpretation: Isoform ENST00000409573 dominates in the brain, as well as in the tibial nerve, ovary and pituitary gland, while isoform ENST00000272570 dominates in the non-brain tissues. The two isoforms differ only in UTRs. Specifically, the brain-dominating isoform has a much longer 3'-UTR, while the non-brain-dominating isoform has a tiny bit longer 5'-UTR. The longer 3'-UTR may offer more options for the regulation of the stability, translational efficiency or cellular localisation of the brain-dominating isoform (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000144161;r=2:112211529-112255136). If the two mRNA isoforms are indeed regulated differently, that could differentially repress the transcription of GATA3. However, according to single-cell RNA-seq data from the Human Protein Atlas and bulk RNA-seq data from GTEx v8, GATA3 is not expressed not only in the brain, but also in the majority of other tissues (https://www.proteinatlas.org/ENSG00000107485-GATA3/single+cell+type ; https://gtexportal.org/home/gene/GATA3). Therefore, the transcription repression of GATA3 by ZC3H8 may not be differential in the brain and the majority of other tissues. Instead, the switch may differentially regulate the expression of small nuclear RNA genes, although a ZC3H8 knockdown did not affect the snRNA expression level (https://www.sciencedirect.com/science/article/pii/S1097276513005029). Importantly, in many tissues outside the brain, the two isoforms are closely coexpressed (while, technically, still taking part in the switch) and, therefore, the production of the protein (same for both mRNA isoforms) should not be affected by the dominance of one of the isoforms. In contrast, in the brain, only one of the two isoforms is expressed and, consequently, its post-transcriptional regulation would affect the level of the protein production and, therefore, likely, cell proliferation, motility and ability to repair DNA double-strand breaks.
+
+Mechanism: Alternative transcription termination sites produce 3'-UTRs of different lengths, while alternative TSSs produce 5'-UTRs of different lengths.
+
+14) POU2F1:
+
+UniProtKB: "Transcription factor that binds to the octamer motif (5'-ATTTGCAT-3') and activates the promoters of the genes for some small nuclear RNAs (snRNA) and of genes such as those for histone H2B and immunoglobulins. Modulates transcription transactivation by NR3C1, AR and PGR" (https://www.uniprot.org/uniprotkb/P14859/entry).
+
+Literature: Takes part in the retinal development (https://journals.biologists.com/dev/article/147/18/dev188730/225821/Pou2f1-and-Pou2f2-cooperate-to-control-the-timing). Alternative isoforms of POU2F1 were studied in terms of their transcription regulation (https://www.sciencedirect.com/science/article/pii/S0165247803000269 ; https://www.sciencedirect.com/science/article/pii/S0300908406000629 ; https://link.springer.com/article/10.1134/S0026893321050101 ; https://www.nature.com/articles/s41598-021-98323-y), target genes (https://academic.oup.com/nar/article/44/19/9218/2468387), evolution (https://link.springer.com/article/10.1134/S1607672922020107) and expression during haematopoesis (https://www.oncotarget.com/article/25648/text/), but these isoforms do not match the two major isoforms participating in this switch. 
+
+Switch interpretation: Isoform ENST00000429375 is dominant in the brain, as well as in the heart, prostate, spleen, thyroid and pituitary gland, while isoform ENST00000443275 is dominant in other non-brain tissues. The protein sequences are considerably different due to the differential inclusion of severla exons; however, the difference lies outside of domains (DBDs) present in my annotation. Consequently, it may affect intrinsically disordered regions of the protein and, consequently, may modulate its DNA-, RNA- or protein-binding ability. Indeed, according to InterPro v96 scanning results, the non-brain-dominating isoform lacks two disordered regions present at the C terminus of the brain-dominating isoform. Therefore, the brain-dominating isoform may have additional binding partners, in comparison to the non-brain-dominating one (for instance, additional coactivators, as POU2F1 is known to be a transcription activator, and transcription activation domains are frequently disordered). Importantly, the two isoforms are coexpressed in the non-brain tissues and, if coexpressed within the same cells, may interact (physically and/or functionally) and produce a combined regulatory effect. In contrast, only one of the two isoforms is produced in the brain and hence determines the regulatory activity of the gene there.
+
+Mechanism: The difference in the amino acid sequence between the two isoforms is due to alternative splicing or alternative promoter usage that causes the first three (coding) exons present in the brain-dominating isoform to be omitted in the non-brain-dominating isoform. It is also produced by the alternative splicing of one whole coding exon included only in the non-brain-dominating isoform and the alternative splicing of the last exon, leading to the addition of a short coding region, prepending the 3'-UTR, in the non-brain-dominating isoform. See https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000143190;r=1:167220876-167427345 .
+
+15) CAMTA2:
+
+UniProtKB: "Transcription activator. May act as tumor suppressor" (https://www.uniprot.org/uniprotkb/O94983/entry).
+
+Literature: Regulates cardiac growth (https://www.cell.com/fulltext/S0092-8674(06)00442-9) and acts in brain development (https://humgenomics.biomedcentral.com/articles/10.1186/s40246-017-0123-5). No data on the function of particular isoforms.
+
+Switch interpretation: Isoform ENST00000348066 dominates in the brain and the pituitary gland, while isoform ENST00000381311 dominates in the non-brain tissues, including the spinal cord. The two isoforms differ by the presence of a catalytic and a protein-binding domains. Specifically, the brain-dominating isoform has two protein binding domains (an IQ-motif / EF-hand binding site and an ankyrin repeat-containing domain), while the non-brain-dominating isoform exchanges one of these domains (the IQ motif) for a catalytic domain (a P-loop containing NTP hydrolase domain). Likely, this exchange modulates both the partner protein binding by the CAMTA2 protein between the brain and non-brain tissues and its catalytic activity (which arises only in non-brain tissues). Importantly, in the non-brain tissues, the two isoforms are closely co-expressed (while still taking part in the switch), which suggests that if they are coexpressed in the same cells as well, they regulate each other's activity or produce a combined effect. In contrast, in the brain and the pituitary gland, only one of the two isoforms is expressed and hence defines the properties of the CAMTA2 gene product. As CAMTA2 binds calmodulin,  which mediates Ca2+ signalling (https://link.springer.com/article/10.1007/BF03007862), and because the IQ motif is a known calmodulin binder (https://faseb.onlinelibrary.wiley.com/doi/epdf/10.1096/fasebj.11.5.9141499), the exchange of the IQ motif for the P-loop containing catalytic domain in the non-brain-dominating isoform likely differentially regulates CAMTA2-dependent Ca2+ signalling within the brain (where only the IQ-motif-containing isoform is expressed) and outside the brain (where both isoforms are coexpressed). Apart from the difference in the coding sequence, the two isoforms differ by the presence of the 5'-UTR. It is included only into the brain-dominating isoform, likely giving this isoform additional means of regulation of its stability, translational efficiency or cellular localisation (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000108509;r=17:4967992-4987675).
+
+Mechanism: Alternative splicing differentially includes a short coding exon towards the 3'-end of the gene (the exon is included in the brain-dominating isoform only) and different exons at the 5'-end of the gene, modulating not only the coding sequence but also the presence or absence of the 5'-UTR (which is included only in the brain-dominating isoform). See https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000108509;r=17:4967992-4987675 .
+
+16) LHX6:
+
+UniProtKB: "Probable transcription factor required for the expression of a subset of genes involved in interneurons migration and development. Functions in the specification of cortical interneuron subtypes and in the migration of GABAergic interneuron precursors from the subpallium to the cerebral cortex (By similarity)" (https://www.uniprot.org/uniprotkb/Q9UPM6/entry).
+
+Literature: Plays a prominent role in the neurogenesis (https://www.sciencedirect.com/science/article/pii/S0896627311003758 ; https://www.sciencedirect.com/science/article/pii/S0896627314001615 ; https://www.nature.com/articles/s41467-022-32898-6) and interneuron migration (https://www.jneurosci.org/content/24/24/5643.short ; https://www.jneurosci.org/content/27/12/3078.short), craniofacial development and dentition (https://www.sciencedirect.com/science/article/pii/S0012160609010331 ; https://www.jbc.org/article/S0021-9258(20)46518-4/fulltext ; https://academic.oup.com/hmg/article/24/17/5024/649000), regulates reproductive behaviour (https://www.cell.com/fulltext/S0896-6273(05)00347-8). Although the functional roles of alternative isoforms of LHX6 in the normal physiology are not known, Wang and co-authors have shown that in cervical cancer cells in vitro the LHX6 transcript variant 4 (which corresponds to the non-brain-dominating isoform in our switch) promotes cell growth, accelerates the cell cycle and inhibits apoptosis (https://onlinelibrary.wiley.com/doi/full/10.1002/cam4.4734). By supressing all exon 12-containing isoforms (including the non-brain-dominating one) and performing a GO enrichment analysis on differentially expressed genes, the authors have shown that these isoforms affect "the selenocysteine metabolic process, membrane lipid catabolic process, cholesterol biosynthetic process, response to unfolded protein, and positive regulation of gene expression" (https://onlinelibrary.wiley.com/doi/full/10.1002/cam4.4734). Additionally, the downregulation of all exon 12-missing isoforms (including the brain-dominating one) and performing a GO enrichment analysis on differentially expressed genes demonstrated that these isoforms are involved in "anterograde dendritic transport of neurotransmitter receptor complex (NTRC), positive regulation of smooth muscle cell migration, negative regulation of vascular permeability, inflammatory response, and smooth muscle cell differentiation" (https://onlinelibrary.wiley.com/doi/full/10.1002/cam4.4734).
+
+Switch interpretation: Isoform ENST00000373754 dominates in the brain, while isoform ENST00000394319 dominates in the non-brain tissues. The two isoforms differ in their protein sequence outside domains. Consequently, they may differ in their DNA-, RNA- or protein-binding properties, as disordered protein regions are known as avid binders. Additionally, the two isoforms have two different 5'-UTRs due to alternative promoter usage (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000106852;r=9:122202577-122229626) and hence may have different stabilities, translational efficiencies or cellular localisations.
+
+Mechanism: Alternative splicing differentially includes a coding exon towards the 3'-end of the gene (the exon is included in the non-brain-dominating isoform only) and a coding part to the last exon (the part is included in the brain-dominating isoform only). Additionally, alternative promoter usage leads to a differential inclusion of an alternative first coding exon (included only in the non-brain-dominating isoform) and to the inclusion of isoform-specific 5'-UTRs (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000106852;r=9:122202577-122229626).
+
+17) ZEB2:
+
+UniProtKB: "Transcriptional inhibitor that binds to DNA sequence 5'-CACCT-3' in different promoters (PubMed:16061479, PubMed:20516212). Represses transcription of E-cadherin (PubMed:16061479). Represses expression of MEOX2 (PubMed:20516212)" (https://www.uniprot.org/uniprotkb/O60315/entry).
+
+Literature: Transcriptional repressor that regulates different facets of embryogenesis and cell differentiation (https://onlinelibrary.wiley.com/doi/full/10.1002/jcp.28277), including the development of the nervous system (https://www.sciencedirect.com/science/article/pii/S0301008215000751 ; https://www.nature.com/articles/nn.4322 ; https://www.nature.com/articles/nn.4321). Also regulates the T cell response to infection (https://rupress.org/jem/article/212/12/2027/41864/Transcriptional-repressor-ZEB2-promotes-terminal) and the development of dendrytic cells (https://rupress.org/jem/article/213/6/897/42069/The-transcription-factor-Zeb2-regulates). 
+
+Switch interpretation: Isoform ENST00000627532 dominates in the brain, as well as in the tibial nerve and esophagus muscularis, while isoform ENST00000419938 dominates in many tissues outside the brain. The two isoforms differ by one homeodomain and five C2H2 ZF domains present in the brain-dominating isoform but lacking in the non-brain-dominating one (which has only a protein-binding domain and three C2H2 ZF domains). Consequently, the two isoforms either have different DNA binding specificities (and likely affinities), or the non-brain-dominating isoform may not be able to bind DNA if the three remaining C2H2 ZFs are not enought for that (or bind different substrates). According to (https://www.sciencedirect.com/science/article/pii/S0021925819726787?pes=vor) and (https://link.springer.com/article/10.1007/s00018-012-0935-3), the homeodomain present in the brain-dominating isoform, is unlikely to bind DNA. Instead, it could bind other proteins, as homeodomains were previously also characterised as protein binders (https://link.springer.com/article/10.1007/s00018-012-0935-3). If this is the case, then not only the DNA binding affinity and/or specificity of ZEB2 could be different between the brain and non-brain tissues, but also its protein-protein interactions could be differentially regulated: If the two isoforms are coexpressed in the same cells, then their abundance would skew the DNA- and protein-binding properties of ZEB2 in the brain vs. non-brain tissues. Additionally, the brain-dominating isoform has a longer 3'-UTR, which likely gives this isoform additional means of regulation of its stability, translational efficiency or cellular localisation (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000169554;r=2:144364364-144521057).
+
+Mechanism: Due to alternative splicing, the non-brain-dominating isoform loses several coding exons, in comparison to the brain-dominating isoform. Additionally, alternative termination site usage leads to the different sizes of the 3'-UTR of the two isoforms (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000169554;r=2:144364364-144521057).
+
+18) BCL11A:
+
+UniProtKB: "Transcription factor (PubMed:16704730, PubMed:29606353). Associated with the BAF SWI/SNF chromatin remodeling complex (PubMed:23644491). Binds to the 5'-TGACCA-3' sequence motif in regulatory regions of target genes, including a distal promoter of the HBG1 hemoglobin subunit gamma-1 gene (PubMed:29606353). Involved in regulation of the developmental switch from gamma- to beta-globin, probably via direct repression of HBG1; hence indirectly repressing fetal hemoglobin (HbF) level (PubMed:29606353, PubMed:26375765). Involved in brain development (PubMed:27453576). May play a role in hematopoiesis (By similarity). Essential factor in lymphopoiesis required for B-cell formation in fetal liver (By similarity). May function as a modulator of the transcriptional repression activity of NR2F2 (By similarity)" (https://www.uniprot.org/uniprotkb/Q9H165/entry).
+
+Literature: Regulates hemoglobin expression (https://www.science.org/doi/full/10.1126/science.1165409). Regulates lymphopoiesis (https://www.nature.com/articles/ni925 ; https://rupress.org/jem/article/209/13/2467/41018/Bcl11a-is-essential-for-lymphoid-development-and), the development of plasmacytoid dendritic cells (https://www.pnas.org/doi/abs/10.1073/pnas.1319228111) and the cortical neuron migration (https://www.sciencedirect.com/science/article/pii/S0896627315005668). Plays a prominent role in the neurodevelopment in general (https://www.sciencedirect.com/science/article/pii/S0002929716302014). "The most abundant isoform we have identified in human lymphoid samples is BCL11A-XL, the longest transcript produced at this locus, and here we report the conservation of this major isoform and its functional characterization. We show that BCL11A-XL is a DNA-sequence-specific transcriptional repressor that associates with itself and with other BCL11A isoforms, as well as with the BCL6 proto-oncogene" (https://molecular-cancer.biomedcentral.com/articles/10.1186/1476-4598-5-18). However, this isoform does not match either of the switching isoforms. Nevertheless, the brain-dominating isoform matches BCL11A-L isoform described here and in other studies (https://www.sciencedirect.com/science/article/pii/S0006497119637183). It lacks three C-terminal C2H2 ZF domains, and according to experiments by (https://www.sciencedirect.com/science/article/pii/S0006497119637183), these domains are indispensable for the repression of the embryonic globin genes: "To examine the activity of known BCL11A isoforms in HbF silencing, we expressed various BCL11A isoforms in these engineered BCL11A-null cells. Ectopic expression of full-length BCL11A-XL isoform, but not the alternatively spliced, C-terminally truncated L isoform, restored the full repression of β-like embryonic globins in BCL11A-null cells. Since XL and L differ only by 91 amino acids containing three tandem C2H2-type zinc finger motifs, these results indicate that the C-terminal zinc finger motifs are indispensable for BCL11A-mediated transcriptional repression" (https://www.sciencedirect.com/science/article/pii/S0006497119637183). The reason could be an insufficient DNA-binding affinity of the remaining ZFs, so that the L isoform cannot bind DNA. Importantly, the HbF-repressing non-brain-dominating isoform is also expressed in the brain, at the levels comparable with its expression in many non-brain tissues. Consequently, the total effect of the coexpression of the two isoforms in the brain is not clear but they could regulate each other's activity there in a manner that is opposite to the one in the non-brain tissues, due to the reverse abundance ratio. For instance, the L isoform is able to interact with other BCL11A isoforms (https://molecular-cancer.biomedcentral.com/articles/10.1186/1476-4598-5-18), likely through its N-terminal region encompassing the first two exons (https://www.sciencedirect.com/science/article/pii/S0002929716302014), and, consequently, could be able to interact with the non-brain-dominant 6-C2H2 ZF isoform as well (because they have the same N-terminal region encoded by the first two exons). In that case, if the L isoform cannot bind DNA, then in the brain it could sequester the whole pool of the 6-ZF isoform and in this way prevent or alleviate the repression of the fetal hemoglobin genes. Vice versa, in the non-brain tissues where the brain-dominating 3-ZF isoform is expressed much lower than the non-brain-dominating 6-ZF isoform, the 6-ZF isoform should be able to repress the HbF. However, this surprising consequence is not observed for the HBG1 and HBG2 genes encoding the fetal-specific gamma-chains (https://www.proteinatlas.org/ENSG00000213934-HBG1/tissue ; https://www.proteinatlas.org/ENSG00000196565-HBG2/tissue), as expected from normal adult physiology. Therefore, if the two isoforms are indeed coexpressed in the same cells, then the functional consequences (if any) of this coexpression and of the switch must be different. Likely, they pertain to other regulatory facets of this gene that are outlined above. For example, it could be some kind of differential transcription regulation in neurons, in comparison to non-brain cell types, as BCL11A plays a prominent role in neurodevelopment.
+
+Switch interpretation: Isoform ENST00000356842 dominates in many brain tissues, while isoform ENST00000335712 dominates in non-brain tissues (including the spinal cord), as well as in the cerebellum, hypothalamus and substantia nigra. The two isoforms differ in the number of C2H2 ZF domains that they contain: while the brain-dominating isoform contains only three ZFs, the non-brain-dominating contains six. Therefore, the DNA-binding specificities (and likely, affinities) of the two isoforms could be different, in this way differentially regulating BCL11A DNA binding within and outside the brain. Also, the two isoforms have completely different 3'-UTRs (this time, the brain-dominating isoform has a shorter one), which likely presents opportunities for the differential regulation of the stability, translational efficiency or cellular localisation of the two mRNA isoforms (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000119866;r=2:60450520-60554467).
+
+Mechanism: The three C2H2 ZFs are lost from the brain-dominating isoform due the fact that the coding part of exon 4 is shorter in this isoform than in the non-brain-dominating one (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000119866;r=2:60450520-60554467). Additionally, one coding exons is included specifically in the brain-dominating isoform. Also, the two isoforms are transcribed from alternative TSSs and use alternative transcription termination sites (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000119866;r=2:60450520-60554467).
+
+19) JAZF1:
+
+UniProtKB: "Acts as a transcriptional corepressor of orphan nuclear receptor NR2C2 (PubMed:15302918). Inhibits expression of the gluconeogenesis enzyme PCK2 through inhibition of NR2C2 activity (By similarity). Also involved in transcriptional activation of NAMPT by promoting expression of PPARA and PPARD (By similarity). Plays a role in lipid metabolism by suppressing lipogenesis, increasing lipolysis and decreasing lipid accumulation in adipose tissue (By similarity). Plays a role in glucose homeostasis by improving glucose metabolism and insulin sensitivity (By similarity)" (https://www.uniprot.org/uniprotkb/Q86VZ6/entry). 
+
+Literature: Regulates lipid metabolism: "These results showed that JAZF1 in adipocytes and liver cells reduces lipid synthesis and increases lipolysis mainly by down-regulating the levels of sterol regulatory element–binding protein 1, acetyl–coenzyme A carboxylase, and fatty acid synthetase mRNA expression and by increasing hormone-sensitive lipase mRNA expression" (https://www.sciencedirect.com/science/article/pii/S0026049510001472), (https://www.sciencedirect.com/science/article/pii/S0006291X13021657). It also regulates glucose metabolism (https://faseb.onlinelibrary.wiley.com/doi/full/10.1096/fj.201901836RR) and affects the normal variation in human height (https://academic.oup.com/hmg/article/18/2/373/2527166).
+
+Switch interpretation: Isoform ENST00000427814 dominates in the brain and in the adrenal gland, while isoform ENST00000283928 dominates outside the brain. The brain-dominating isoform has two C2H2 ZFs (which may not be enough for DNA binding), while the non-brain-dominating isoform has three C2H2 ZFs. Consequently, the switch may differentially regulate the overall DNA-binding affinity or specificity of the JAZF1 proteins within and outside the brain. This, in turn, could differentially regulate the lipid and glucose metabolism between the brain and non-brain tissues.
+
+Mechanism: Alternative promoter usage excludes the first coding exon from the brain-dominating isoform (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000153814;r=7:27830573-28180795), which must lead to the loss of one C2H2 ZF domain.
+
+20) MEIS1:
+
+UniProtKB: "Acts as a transcriptional regulator of PAX6. Acts as a transcriptional activator of PF4 in complex with PBX1 or PBX2. Required for hematopoiesis, megakaryocyte lineage development and vascular patterning. May function as a cofactor for HOXA7 and HOXA9 in the induction of myeloid leukemias" (https://www.uniprot.org/uniprotkb/O00470/entry).
+
+Literature: MEIS1 gene plays diverse roles in development: it takes part in the limb development (https://www.nature.com/articles/46580), eye development (https://www.embopress.org/doi/full/10.1038/sj.emboj.7600038 ; https://journals.biologists.com/dev/article/135/5/805/65022/Evidence-for-an-evolutionary-conserved-role-of ; https://link.springer.com/article/10.1186/1749-8104-5-22 ; https://journals.biologists.com/dev/article/142/17/3009/46937/Meis1-coordinates-a-network-of-genes-implicated-in), hematopoesis (https://www.embopress.org/doi/full/10.1038/sj.emboj.7600038 ; https://genesdev.cshlp.org/content/21/22/2845.full ; https://ashpublications.org/blood/article/120/2/335/30439/Dual-actions-of-Meis1-inhibit-erythroid-progenitor ; https://ashpublications.org/blood/article/120/25/4963/31144/Meis1-regulates-the-metabolic-phenotype-and ; https://haematologica.org/article/view/7164), angiogenesis (https://www.embopress.org/doi/full/10.1038/sj.emboj.7600038), neurodevelopment (https://www.jneurosci.org/content/35/43/14467.short ; https://www.jneurosci.org/content/38/5/1277.short ; https://www.biorxiv.org/content/10.1101/2022.08.17.504235v1.full) and is expressed in the forebrain during development (https://www.sciencedirect.com/science/article/pii/S0940960213000885). It also inhibits cardiomyocyte proliferation in the adult heart (https://www.nature.com/articles/nature12054). Many of the papers cited above mention or study two different isoforms of MEIS1 but the shorter one does not match either of the switching isoforms.
+
+Switch interpretation: Isoform ENST00000495021 dominates in the brain and heart, while isoform ENST00000488550 dominates in many non-brain tissues. Of note, in the heart and skeletal muscles, the two isoforms are closely coexpressed (although still taking part in the switch), while in other tissues the switch is more pronounced. The two isoforms differ in a protein sequence outside of the two identified domains (a homeodomain DBD and a protein-binding domain). Therefore, the difference may lie in a disordered region, differentially regulating the DNA-, RNA- or protein-binding properties of MEIS1 within and outside the brain. Of note, the UTRs of the two isoforms are also different, which may provide an opportunity for a differential regulation of the stability, translational efficiency or cellular localisation of the two mRNA isoforms. Of note, the 3'-UTR of the brain-dominating isoform is shorter than the one of the non-brain-dominating isoform, and the 5'-UTRs (although very short) are completely different (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000143995;r=2:66433452-66573869).
+
+Mechanism: Alternative TSSs (probably, within the same broad developmental promoter) and complex alternative splicing lead to the difference in the coding sequences and UTRs of the two isoforms (https://jan2020.archive.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=ENSG00000143995;r=2:66433452-66573869).
+
+## Plot known switches
+
+Plot the known switches, reproduced in my analysis, in full (for all switching tissues). Strictly speaking, here I plot all switches by TF genes with reproduced switches:
+
+```{r}
+linkage.type = "complete"
+
+linkage.type.filename = "complete"
+
+cluster.number = ""
+
+selected.switches = cluster.annot.df.complete %>%
+  filter(humantfs_gene_name == "IRF3") %>%
+  pull(switch_id)
+
+tissues.ordered = tissues.ordered.complete
+
+p.list = plot_switches(selected.switches)
+```
+
+Plot switches by MEF2C and MEF2A:
+
+```{r}
+linkage.type = "Ward's D2"
+
+linkage.type.filename = "wardd2"
+
+cluster.number = ""
+
+selected.switches = cluster.annot.df.wardd2 %>%
+  filter(humantfs_gene_name %in% c("MEF2C", "MEF2A")) %>%
+  pull(switch_id)
+
+tissues.ordered = tissues.ordered.wardd2
+
+p.list = plot_switches(selected.switches)
+```
+
+To-do:
+- Select examples to show:
+-- Interesting uncharacterised switches (a brain-non-brain switch with a prominent expression profile; possible relevance of the TF to the brain or non-brain tissues, known from literature; interesting and plausible functional consequences).
+
+Ideas about Fig. 6, S6, S7:
+1) Fig. 6: Six lead examples (panels A-F; see the selection criteria in the to-do list). Represent these switches in a condensed form: no tissue names, only the brain-non-brain division shown by colored bars under the x axis. Refer to Fig. S6 for the full representation of the same switches.
+2) Fig. S6: Full representation of the switches from Fig. 6.
+3) Fig. S7: Any additional plots for the switches in Fig. 6 (for example, switches of other TFs with the same interpretation, cross-tissue-normalized expression of IRF3 isoforms to show if IRF3 is still considerably expressed in the brain - that it is a real switch and not just supression of all IRF3 isoforms in the brain).
