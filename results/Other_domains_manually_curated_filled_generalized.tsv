@@ -1,0 +1,263 @@
+ipr_accession	ipr_description	Molecular_mechanism	Molecular_function	Molecular_function_general	Comment
+IPR003654	OAR domain	Protein-binding; Structural	Transcription regulation; DNA binding inhibition	Transcription regulation; DNA binding inhibition	https://www.sciencedirect.com/science/article/pii/S0925477302004161 ; https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0111432#pone-0111432-g004 ; jbc.org/article/S0021-9258(20)89794-4/pdf ; https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0206914
+IPR021918	Domain of unknown function DUF3528, homeobox protein, eukaryotic	Protein-binding; Structural	Transcription regulation; Transcription activation inhibition	Transcription regulation; Transcription activation inhibition	https://www.sciencedirect.com/science/article/pii/S2211124716305502
+IPR022151	Sox developmental protein N-terminal	Protein-binding	Dimerization	Dimerization	https://academic.oup.com/nar/article/47/13/6917/5518312
+IPR001909	Krueppel-associated box	Protein-binding	Transcription repression	Transcription repression	
+IPR006794	Transcriptional activator, Zfx / Zfy domain	?Protein-binding	Transcription activation	Transcription activation	
+IPR003309	SCAN domain	Protein-binding	Homo-oligomerization; Hetero-oligomerization	Oligomerization	
+IPR006715	PEA3-type ETS-domain transcription factor, N-terminal	Phosphorylation site	Transcription activation; DNA binding inhibition	Transcription activation; DNA binding inhibition	
+IPR041086	YAP binding domain	Protein-binding	Transcription regulation	Transcription regulation	
+IPR032198	E2F transcription factor, CC-MB domain	Protein-binding	Heterodimerization	Dimerization	
+IPR019548	CTF transcription factor/nuclear factor 1, N-terminal	DBD; Protein-binding	DBD; Dimerization	DBD; Dimerization	
+IPR000647	CTF transcription factor/nuclear factor 1	Unclear	Unspecified	Unspecified	
+IPR022106	Paired box protein 7, C-terminal	Unclear	Unspecified	Unspecified	
+IPR003118	Pointed domain	Protein-binding	Transcription repression	Transcription repression	Molecular mechanism from InterPro; Molecular function from TFRegDB (ETV7, isoform Q9Y603; ERG, isoform P11308)
+IPR001965	Zinc finger, PHD-type	Protein-binding; Structural	Transcription regulation; Protein folding	Transcription regulation; Protein folding	
+IPR019787	Zinc finger, PHD-finger	Protein-binding; Structural	Transcription regulation; Protein folding	Transcription regulation; Protein folding	
+IPR025750	Requiem/DPF N-terminal domain	Protein-binding	Transcription regulation	Transcription regulation	https://www.nature.com/articles/s41598-017-11806-9
+IPR000210	BTB/POZ domain	Protein-binding	Homodimerization	Dimerization	
+IPR000536	Nuclear hormone receptor, ligand-binding domain	Ligand-binding	Hormone binding	Ligand binding	
+IPR001781	Zinc finger, LIM-type	Protein-binding	Protein binding	Protein binding	
+IPR013711	Runx, C-terminal  domain	Protein-binding	Transcription regulation	Transcription regulation	https://ashpublications.org/blood/article/105/11/4298/19507/Shared-and-distinct-roles-mediated-through-C
+IPR010542	Vertebrate heat shock transcription factor, C-terminal domain	Protein-binding	Homotrimerization; Transcription repression	Oligomerization; Transcription repression	https://www.jbc.org/article/S0021-9258(19)72901-9/fulltext
+IPR002999	Tudor domain	Protein-binding	Methylated protein binding	Protein binding	
+IPR022255	Domain of unknown function DUF3776	?DBD	?DBD	?DBD	https://www.nature.com/articles/nsmb.2353 ; https://febs.onlinelibrary.wiley.com/doi/full/10.1016/j.febslet.2012.02.012
+IPR041297	DNA repair protein Crb2, Tudor domain	Protein-binding	H4K20me1-binding; H4K20me2-binding	Histone binding	
+IPR000014	PAS domain	Ligand-binding	Heme / Flavin / FAD / 4-hydroxycinnamyl chromophore binding	Ligand binding	Signal sensor
+IPR013767	PAS fold	Ligand-binding	Heme / Flavin / FAD / 4-hydroxycinnamyl chromophore binding	Ligand binding	
+IPR000433	Zinc finger, ZZ-type	Protein-binding	Protein binding	Protein binding	
+IPR041981	ZZZ3, zinc finger, ZZ-type	Protein-binding	Transcription activation	Transcription activation	https://www.nature.com/articles/s41467-018-06247-5
+IPR001827	Homeobox protein, antennapedia type, conserved site	Protein-binding	Heterodimerization; Transcription repression	Dimerization; Transcription repression	http://genesdev.cshlp.org/content/9/6/663.abstract ; https://pubmed.ncbi.nlm.nih.gov/9449676/
+IPR032354	FOXP, coiled-coil domain	Protein-binding	Dimerization	Dimerization	
+IPR025243	Domain of unknown function DUF4195	Unclear	Unspecified	Unspecified	
+IPR001214	SET domain	Catalytic	Methyltransferase	Catalytic	H2K9 methylation
+IPR029279	FLYWCH-type zinc finger-containing protein, N-terminal	Unclear	Unspecified	Unspecified	
+IPR022135	Distal-less-like homeobox protein, N-terminal domain	Protein-binding	Transcription activation	Transcription activation	https://www.sciencedirect.com/science/article/pii/S0021925818463478
+IPR005173	DMRTA motif	Unclear	Unspecified	Unspecified	
+IPR041588	Integrase zinc-binding domain	Ligand-binding	Zinc binding	Ligand binding	
+IPR004865	HSR domain	Protein-binding	Homodimerization	Dimerization	
+IPR001487	Bromodomain	Protein-binding	Histone acetylated lysine binding	Histone binding	
+IPR022102	Holliday junction regulator protein family C-terminal	Protein-binding	Centromere targeting	Protein binding	https://www.nature.com/articles/s41467-019-12019-6 
+IPR021802	MiT/TFE transcription factors, C-terminal	Phosphorylation site	Degradation	Degradation	https://www.pnas.org/content/112/5/E420.long
+IPR031867	MiT/TFE transcription factors, N-terminal	Protein-binding	Cytoplasm localisation	Protein binding	https://www.nature.com/articles/s41598-018-37522-6
+IPR003650	Orange domain	Protein-binding	Dimerization; Transcription repression	Dimerization; Transcription repression	
+IPR025884	Methyl-CpG binding protein 2/3, C-terminal domain	Unclear	Unspecified	Unspecified	
+IPR032343	Methyl-CpG-binding domain protein 2/3, p55-binding region	Protein-binding	Transcription regulation	Transcription regulation	
+IPR032397	Rel homology dimerisation domain	Protein-binding	Dimerization	Dimerization	
+IPR001660	Sterile alpha motif domain	Protein-binding; RNA-binding	Dimerization; RNA binding	Dimerization; RNA binding	
+IPR010991	p53, tetramerisation domain	Protein-binding	Tetramerization	Oligomerization	
+IPR037611	Tumour protein p63, SAM domain	Protein-binding; Lipid-binding	Transcription regulation; Lipid binding	Transcription regulation; Lipid binding	https://journals.asm.org/doi/10.1128/mcb.22.24.8601-8611.2002 ; https://www.sciencedirect.com/science/article/pii/S0006295211005636
+IPR022130	Paired-box protein 2 C-terminal	?Protein-binding	Transcription regulation	Transcription regulation	https://www.ncbi.nlm.nih.gov/pmc/articles/PMC450116/ 
+IPR018501	DDT domain	?DBD	?DBD	?DBD	
+IPR028941	WHIM2 domain	Protein-binding; DBD	Cofactor binding; DBD	Protein binding; DBD	
+IPR028942	WHIM1 domain	Protein-binding	Cofactor binding	Protein binding	
+IPR037374	BAZ2A/BAZ2B, bromodomain	Protein-binding	Histone acetylated lysine binding	Histone binding	
+IPR000488	Death domain	Protein-binding	Dimerization	Dimerization	
+IPR020683	Ankyrin repeat-containing domain	Protein-binding	Protein binding	Protein binding	
+IPR033926	NFkappaB IPT domain	Protein-binding	Dimerization	Dimerization	http://genesdev.cshlp.org/content/24/20/2270.full.pdf
+IPR006711	Hox9, N-terminal activation domain	Protein-binding	Transcription activation	Transcription activation	
+IPR037612	Tumour protein p73, SAM domain	Lipid-binding	Membrane binding	Lipid binding	
+IPR007668	RFX1 transcription activation region	?Protein-binding	Transcription activation	Transcription activation	
+IPR014001	Helicase superfamily 1/2, ATP-binding domain	Unclear	Unspecified	Unspecified	
+IPR014012	Helicase/SANT-associated domain	?DBD	?DBD	?DBD	
+IPR000330	SNF2-related, N-terminal domain	Unclear	Unspecified	Unspecified	Subtype of IPR014001 (see InterPro hierarchy for domain entries)
+IPR001650	Helicase, C-terminal	Unclear	Unspecified	Unspecified	
+IPR013558	CTNNB1 binding, N-teminal	Protein-binding	Transcription activation	Transcription activation	
+IPR000128	Progesterone receptor	Protein-binding	Transcription regulation; Transcription regulation inhibition	Transcription regulation; Transcription regulation inhibition	https://www.sciencedirect.com/science/article/abs/pii/S0960076003001973
+IPR010011	Domain of unknown function DUF1518	Protein-binding	Transcription activation	Transcription activation	https://academic.oup.com/nar/article/36/6/1847/2410128
+IPR014920	Nuclear receptor coactivator, Ncoa-type, interlocking	Protein-binding	Heterodimerization	Dimerization	
+IPR014935	Nuclear receptor coactivator, receptor-binding domain	Protein-binding	Transcription activation	Transcription activation	
+IPR035965	PAS domain superfamily	Ligand-binding	Heme / Flavin / FAD / 4-hydroxycinnamyl chromophore binding	Ligand binding	
+IPR034076	Transcriptional repressor NF-X1, R3H domain	?Nucleic acid-binding	?Nucleic acid binding	?Nucleic acid binding	
+IPR001841	Zinc finger, RING-type	Catalytic	Ubiquitin-protein ligase	Catalytic	
+IPR003347	JmjC domain	Catalytic	Histone demethylation	Catalytic	
+IPR001810	F-box domain	Protein-binding	Ubiquitin ligase-binding	Protein binding	
+IPR041070	Jumonji, helical domain	Unclear	Unspecified	Unspecified	
+IPR041667	Cupin-like domain 8	Catalytic	Histone demethylation	Catalytic	Similar to IPR003347 (see InterPro hierarchy for domains)
+IPR006553	Leucine-rich repeat, cysteine-containing subtype	Protein-binding	Protein binding	Protein binding	
+IPR024736	Oestrogen-type nuclear receptor final C-terminal domain	Unclear	Unspecified	Unspecified	
+IPR001292	Oestrogen receptor	?Protein-binding	Transcription activation	Transcription activation	TFRegDB, ESR1, isoform P03372
+IPR003102	Coactivator CBP, pKID	Protein-binding	Transcription activation	Transcription activation	
+IPR034729	Zinc finger CCHC HIVEP-type	Unclear	Unspecified	Unspecified	
+IPR021786	Pre-mRNA splicing factor component Cdc5p/Cef1	?Protein-binding	Transcription activation	Transcription activation	
+IPR032675	Leucine-rich repeat domain superfamily	Protein-binding	Protein binding	Protein binding	
+IPR008906	HAT, C-terminal dimerisation domain	Protein-binding	Dimerization	Dimerization	
+IPR031701	Homeobox protein SIX1, N-terminal SD domain	Protein-binding	Transcription activation	Transcription activation	
+IPR013655	PAS fold-3	Ligand-binding	Heme / Flavin / FAD / 4-hydroxycinnamyl chromophore binding	Ligand binding	
+IPR014887	HIF-1 alpha, transactivation domain, C-terminal	Protein-binding	Transcription activation	Transcription activation	
+IPR021537	Hypoxia-inducible factor, alpha subunit	Unclear	Unspecified	Unspecified	
+IPR023339	CVC domain	Unclear	Unspecified	Unspecified	
+IPR015395	C-myb, C-terminal	Unclear	Unspecified	Unspecified	
+IPR022084	Transcription factor Elf, N-terminal	?Protein-binding	Transcription activation	Transcription activation	https://www.sciencedirect.com/science/article/pii/S0014579397003876
+IPR000306	FYVE zinc finger	Lipid-binding	Membrane binding	Lipid binding	
+IPR017455	Zinc finger, FYVE-related	Lipid-binding	Membrane binding	Lipid binding	https://www.nature.com/articles/28767 ; https://onlinelibrary.wiley.com/doi/10.1002/prot.22392
+IPR032399	RelB leucine zipper	Protein-binding	Dimerization	Dimerization	
+IPR032400	RelB transactivation domain	Protein-binding	Transcription activation	Transcription activation	
+IPR013851	Transcription factor Otx, C-terminal	DBD; Protein-binding	DBD; Dimerization	DBD; Dimerization	https://www.sciencedirect.com/science/article/pii/S0014579399001131 ; https://www.sciencedirect.com/science/article/pii/S0006291X99918727
+IPR032453	Homeobox protein PKNOX/Meis, N-terminal	Protein-binding	Heterodimerization	Dimerization	https://www.pnas.org/content/94/26/14553
+IPR031784	Krueppel-like factor 1, transactivation domain 2	?Protein-binding	Transcription activation	Transcription activation	
+IPR031786	Krueppel-like factor 1, transactivation domain 1	Protein-binding	Transcription activation; Ubiquitin binding	Transcription activation; Protein binding	
+IPR005542	PBX	Unclear	Unspecified	Unspecified	
+IPR003652	Ataxin, AXH domain	Protein-binding; RNA-binding	Dimerization; RNA binding	Dimerization; RNA binding	
+IPR025281	Domain of unknown function DUF4074	Unclear	Unspecified	Unspecified	
+IPR022067	Homeobox protein Hox1A3 N-terminal	Protein-binding	Heterodimerization	Dimerization	https://onlinelibrary.wiley.com/doi/10.1002/pros.23747
+IPR032201	Transcription factor COE, helix-loop-helix domain	Protein-binding	Dimerization	Dimerization	
+IPR038006	Transcription factor COE, IPT domain	Protein-binding	Dimerization	Dimerization	https://www.sciencedirect.com/science/article/pii/S0021925820595483 ; http://genesdev.cshlp.org/content/24/20/2270.full.pdf
+IPR002909	IPT domain	DBD	DBD	DBD	
+IPR000048	IQ motif, EF-hand binding site	Protein-binding; Phosphorylation site	EF-hand protein binding	Protein binding	
+IPR027417	P-loop containing nucleoside triphosphate hydrolase	Catalytic	NTPase	Catalytic	
+IPR041493	PRDM4, zinc knuckle motif	Ligand-binding	Zinc binding	Ligand binding	
+IPR002546	Myogenic basic muscle-specific protein	?Protein-binding	Transcription activation	Transcription activation	
+IPR022032	Myogenic determination factor 5	Unclear	Unspecified	Unspecified	
+IPR041192	ZNF451, PIN-like domain	Protein-binding; Catalytic	Transcription activation; Nuclease	Transcription activation; Catalytic	
+IPR021623	Lamina-associated polypeptide 2 alpha, C-terminal	Protein-binding	Lamin A/C binding; Transcription repression	Protein binding; Transcription repression	https://www.sciencedirect.com/science/article/pii/S0969212607001748 ; https://www.nature.com/articles/1209615
+IPR010578	Single-minded, C-terminal	?Protein-binding	Transcription repression	Transcription repression	
+IPR003893	Iroquois-class homeodomain protein	Protein-binding	Cell cycle regulation	Protein binding	https://journals.plos.org/plosgenetics/article?id=10.1371/journal.pgen.1005463
+IPR001409	Glucocorticoid receptor	Protein-binding	Transcription regulation	Transcription regulation	https://www.sciencedirect.com/science/article/abs/pii/S0303720711001973 ; https://www.jbc.org/article/S0021-9258(19)66365-9/fulltext
+IPR001132	SMAD domain, Dwarfin-type	Protein-binding	Homodimerization; Heterodimerization; TGFb receptor binding; Chromatin machinery binding	Dimerization; Protein binding	https://www.sciencedirect.com/science/article/pii/S0968000415000614
+IPR006820	Caudal-like activation domain	Phosphorylation site	Transcription activation	Transcription activation	
+IPR014889	Transcription factor DP, C-terminal	Protein-binding	Transcription activation	Transcription activation	
+IPR019102	HMG box transcription factor BBX, domain of unknown function DUF2028	Unclear	Unspecified	Unspecified	
+IPR037598	TFCP2L1, SAM domain	Protein-binding	Hexamerization	Oligomerization	https://link.springer.com/article/10.1007%2Fs12010-016-2021-z
+IPR041418	SAM domain	Protein-binding	Dimerization	Dimerization	
+IPR000980	SH2 domain	Protein-binding	Dimerization	Dimerization	https://www.pnas.org/content/105/27/9238
+IPR013799	STAT transcription factor, protein interaction	Protein-binding	Homodimerization	Dimerization	
+IPR013800	STAT transcription factor, all-alpha domain	Protein-binding	Heterodimerization	Dimerization	https://journals.asm.org/doi/10.1128/MCB.20.19.7132-7139.2000
+IPR022752	Signal transducer and activation of transcription 1, TAZ2 binding domain, C-terminal	Protein-binding	Transcription activation	Transcription activation	
+IPR035859	STAT1, SH2 domain	Protein-binding	Dimerization	Dimerization	https://www.pnas.org/content/105/27/9238
+IPR023334	REKLES domain	Protein-binding	Multimerization; Nuclear import/export	Oligomerization; Other	
+IPR001025	Bromo adjacent homology (BAH) domain	Protein-binding	Transcription repression	Transcription repression	
+IPR003616	Post-SET domain	Ligand-binding; Protein-binding	Histone methylation; Histone tail binding	Catalytic; Histone binding	
+IPR006560	AWS domain	DBD	DBD	DBD	https://onlinelibrary.wiley.com/doi/pdf/10.1002/humu.21424
+IPR012682	Transcription regulator Myc, N-terminal	Unclear	Unspecified	Unspecified	
+IPR004198	Zinc finger, C5HC2-type	?DBD	?DBD	?DBD	
+IPR013637	Lysine-specific demethylase-like domain	Unclear	Unspecified	Unspecified	
+IPR003349	JmjN domain	Protein-binding	Dimerization	Dimerization	https://www.oncotarget.com/article/24717/text/
+IPR019471	Interferon regulatory factor-3	Protein-binding	Homodimerization	Dimerization	https://www.sciencedirect.com/science/article/pii/S0378111999002620
+IPR003888	FY-rich, N-terminal	Structural	Protein folding	Protein folding	
+IPR003889	FY-rich, C-terminal	Structural	Protein folding	Protein folding	
+IPR041958	KMT2A, ePHD domain	Unclear	Unspecified	Unspecified	
+IPR042023	KMT2A, PHD domain 1	Protein-binding	Homodimerization; Transcription regulation	Dimerization; Transcription regulation	https://journals.asm.org/doi/10.1128/MCB.21.10.3589-3597.2001
+IPR042025	KMT2A, PHD domain 2	Protein-binding	Homodimerization; Transcription regulation	Dimerization; Transcription regulation	https://journals.asm.org/doi/10.1128/MCB.21.10.3589-3597.2001
+IPR000949	ELM2 domain	Protein-binding	Homodimerization; Transcription repression	Dimerization; Transcription repression	https://link.springer.com/article/10.1007%2Fs10555-014-9513-5
+IPR017884	SANT domain	Protein-binding	Histone tail binding	Histone binding	
+IPR012642	Transcription regulator Wos2-domain	Protein-binding	Transcription activation	Transcription activation	https://www.nature.com/articles/s41389-021-00309-y ; https://academic.oup.com/biolreprod/article/86/2/30,%201-8/2530606
+IPR032067	FOXO protein, transactivation domain	Protein-binding	Transcription activation	Transcription activation	
+IPR032068	FOXO protein, KIX-binding domain	Protein-binding	Transcription activation	Transcription activation	
+IPR032392	SATB, ubiquitin-like oligomerisation domain	Protein-binding	Tetramerization	Oligomerization	
+IPR021849	Early growth response, N-terminal	?Protein-binding	Transcription activation	Transcription activation	https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0096037
+IPR021839	Early growth response protein 1, C-terminal	Protein-binding; Catalytic	Nucleolus targeting; DNA demethylation	Protein binding; Catalytic	https://www.nature.com/articles/s41467-019-11905-3 ; https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0096037
+IPR022582	Transcription factor, T-box, region of unknown function	Unclear	Unspecified	Unspecified	
+IPR022575	Neurogenic differentiation factor, domain of unknown function	Unclear	Unspecified	Unspecified	
+IPR032565	Domain of unknown function DUF4927	Unclear	Unspecified	Unspecified	
+IPR015350	Beta-trefoil DNA-binding domain	Protein-binding; DBD	Transcription repression; DBD	Transcription repression; DBD	
+IPR038007	RBP-Jkappa, IPT domain	Protein-binding	Protein binding	Protein binding	
+IPR013783	Immunoglobulin-like fold	Protein-binding	Dimerization	Dimerization	
+IPR014756	Immunoglobulin E-set	Protein-binding	Dimerization	Dimerization	
+IPR027384	Runx, central domain superfamily	Protein-binding	Transcription activation	Transcription activation	https://onlinelibrary.wiley.com/doi/10.1111/j.1365-2567.2009.03042.x
+IPR025719	Myelin gene regulatory factor C-terminal domain 2	Protein-binding	Homotrimerization; ER transmembrane localisation	Oligomerization; Other	https://www.nature.com/articles/s41598-020-57593-8 ; https://journals.plos.org/plosbiology/article?id=10.1371/journal.pbio.1001625
+IPR026932	Myelin gene regulatory factor C-terminal domain 1	Protein-binding; Catalytic	Homotrimerization; Auto-cleavage	Oligomerization; Catalytic	
+IPR030392	Intramolecular chaperone auto-processing domain	Protein-binding; Catalytic	Homotrimerization; Auto-cleavage	Oligomerization; Catalytic	
+IPR022097	Transcription factor SOX	Unclear	Unspecified	Unspecified	
+IPR013638	Fork-head N-terminal	?Protein-binding	Transcription activation	Transcription activation	https://journals.asm.org/doi/epdf/10.1128/mcb.12.9.3723-3732.1992
+IPR018533	Forkhead box protein, C-terminal	Protein-binding	Transcription activation	Transcription activation	https://www.nature.com/articles/s41598-018-35390-8; https://www.sciencedirect.com/science/article/pii/S0304419X06000552
+IPR004875	DDE superfamily endonuclease domain	Catalytic	Endonuclease	Catalytic	
+IPR015115	Centromere protein CENP-B, C-terminal domain	Protein-binding	Homodimerization	Dimerization	
+IPR011257	DNA glycosylase	Catalytic	DNA glycosylase	Catalytic	
+IPR013592	Maf transcription factor, N-terminal	Phosphorylation site	Transcription activation	Transcription activation	
+IPR005643	Jun-like transcription factor	Phosphorylation site; Protein-binding	Transcription regulation	Transcription regulation	https://www.nature.com/articles/onc2008120
+IPR008013	GATA-type transcription activator, N-terminal	?Protein-binding	Transcription activation	Transcription activation	https://www.sciencedirect.com/science/article/pii/S0021925820498357 ; http://genesdev.cshlp.org/content/13/22/2983.full
+IPR010506	DMAP1-binding domain	Protein-binding	Transcription repression	Transcription repression	
+IPR022702	DNA (cytosine-5)-methyltransferase 1, replication foci domain	?Protein/DNA-binding	Replication foci targeting	?Protein / DNA binding	
+IPR001525	C-5 cytosine methyltransferase	Catalytic	Methyltransferase	Catalytic	https://www.mdpi.com/2073-4425/9/12/620/htm
+IPR021565	Rabenosyn, Rab binding domain	Protein-binding	GTPase binding	Protein binding	
+IPR001878	Zinc finger, CCHC-type	?Nucleic acid-binding	?Nucleic acid binding	?Nucleic acid binding	
+IPR022590	Peroxisome proliferator-activated receptor gamma, N-terminal	Protein-binding	Transcription regulation	Transcription regulation	https://journals.asm.org/doi/10.1128/MCB.01238-09 ; https://www.frontiersin.org/articles/10.3389/fendo.2017.00102/full#B22 ; https://academic.oup.com/mend/article/20/6/1261/2741519
+IPR035500	Nuclear hormone receptor-like domain superfamily	Ligand-binding	Hormone binding	Ligand binding	
+IPR013867	Telomere repeat-binding factor, dimerisation domain	Protein-binding	Homodimerization	Dimerization	
+IPR031902	Telomeric repeat-binding factor 2, Rap1-binding domain	Protein-binding	Transcription regulation	Transcription regulation	
+IPR001610	PAC motif	Structural	PAS domain folding	Protein folding	
+IPR032714	Zinc finger protein DZIP1, N-terminal	Protein-binding	Transcription regulation	Transcription regulation	https://www.sciencedirect.com/science/article/pii/S002192582048771X?via%3Dihub
+IPR041886	Protein C-ets-1, pointed domain	Protein-binding	Protein binding	Protein binding	
+IPR006897	Hepatocyte nuclear factor 1, beta isoform, C-terminal	?Protein-binding	Transcription activation	Transcription activation	
+IPR006898	Hepatocyte nuclear factor 1, alpha isoform C-terminal	Protein-binding	Transcription activation	Transcription activation	https://diabetes.diabetesjournals.org/content/51/5/1409
+IPR006899	Hepatocyte nuclear factor 1, N-terminal	Protein-binding	Dimerization; Transcription activation	Dimerization; Transcription activation	
+IPR037599	Transcription factor CP2, SAM domain	Protein-binding	Dimerization	Dimerization	
+IPR007728	Pre-SET domain	Structural	SET domain folding	Protein folding	
+IPR002717	Histone acetyltransferase domain, MYST-type	Catalytic; Protein-binding; DBD; Ligand-binding	Histone acetylation; Histone binding; DBD; Acetyl-CoA binding	Catalytic; Histone binding; DBD; Ligand binding	
+IPR040706	MYST, zinc finger domain	Protein-binding	Histone binding	Histone binding	https://www.embopress.org/doi/full/10.1093/embo-reports/kve022
+IPR032385	T-box transcription factor-associated	Protein-binding	Transcription activation	Transcription activation	https://www.nature.com/articles/35005118
+IPR003327	Leucine zipper, Myc	Protein-binding	Dimerization	Dimerization	
+IPR022114	Doublesex- and mab-3-related transcription factor  1-like	Unclear	Unspecified	Unspecified	
+IPR008121	Transcription factor AP-2 alpha, N-terminal	Protein-binding	Transcription activation	Transcription activation	https://www.jbc.org/article/S0021-9258(19)79456-3/fulltext
+IPR025398	Domain of unknown function DUF4371	Unclear	Unspecified	Unspecified	
+IPR024779	2OGFeDO, oxygenase domain	Catalytic	Oxygenase	Catalytic	
+IPR035856	STAT4, SH2 domain	Protein-binding	Dimerization	Dimerization	https://www.pnas.org/content/105/27/9238
+IPR021064	Estrogen receptor beta, N-terminal	Ligand-binding	Estrogen binding	Ligand binding	Activation of genes with estrogen response elements in the promoter
+IPR036051	KRAB domain superfamily	Protein-binding	Transcription repression	Transcription repression	
+IPR013872	p53 transactivation domain	Protein-binding	Transcription activation	Transcription activation	
+IPR040926	Cellular tumor antigen p53, transactivation domain 2	Protein-binding	Transcription activation	Transcription activation	
+IPR000253	Forkhead-associated (FHA) domain	Protein-binding	Phosphopeptide recognition	Protein binding	
+IPR031577	Doublesex- and mab-3-related transcription factor C1/C2, C-terminal	Unclear	Unspecified	Unspecified	
+IPR021780	Nuclear/hormone receptor activator site AF-1	Protein-binding	Transcription activation	Transcription activation	
+IPR040880	Domain of unknown function DUF5604	?Protein-binding	Nuclear localisation signal	?Protein-binding	https://www.embopress.org/doi/full/10.15252/embr.201948297 ; https://onlinelibrary.wiley.com/doi/10.1111/gtc.12068
+IPR041291	Histone methyltransferase, Tudor domain 1	Protein-binding	Protein binding	Protein binding	
+IPR041292	Histone methyltransferase, Tudor domain 2	Protein-binding	H3K14ac/K9me binding	Histone binding	https://www.nature.com/articles/s41467-017-02259-9
+IPR029298	RFX5, C-terminal	Protein-binding	NF-Y binding	Protein binding	
+IPR040889	RFX5, N-terminal	Protein-binding	Homodimerization	Dimerization	
+IPR032346	Transcriptional repressor p66, coiled-coil MBD2-interaction domain	Protein-binding	MBD binding	Protein binding	
+IPR001387	Cro/C1-type helix-turn-helix domain	DBD	DBD	DBD	
+IPR013681	Myelin transcription factor 1	Protein-binding	Protein binding	Protein binding	https://www.sciencedirect.com/science/article/pii/S1044743103003191
+IPR008598	Drought induced 19 protein type, zinc-binding domain	Protein-binding	Transcription regulation	Transcription regulation	https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3196287/
+IPR019447	DNA/RNA-binding protein Kin17, conserved domain	Protein-binding	Protein binding	Protein binding	
+IPR041330	KN17, SH3-like C-terminal domain	RNA-binding	RNA binding	RNA binding	
+IPR041995	Kin17, KOW domain	RNA-binding	RNA binding	RNA binding	
+IPR035573	Friend leukemia integration 1 transcription factor, pointed domain	Protein-binding	Protein binding	Protein binding	
+IPR037600	Upstream-binding protein 1, SAM domain	Protein-binding	Dimerization	Dimerization	
+IPR012462	Peptidase C78, ubiquitin fold modifier-specific peptidase 1/ 2	Catalytic	Peptidase	Catalytic	
+IPR004092	Mbt repeat	Protein-binding	Methylated protein binding	Protein binding; Histone binding	https://www.sciencedirect.com/science/article/pii/S002192582046747X ; https://academic.oup.com/nar/article/37/7/2204/1019856
+IPR024668	GA-binding protein alpha subunit, N-terminal	Protein-binding	Transcription activation	Transcription activation	
+IPR022056	CpG binding protein, C-terminal	Protein-binding	Transcription activation	Transcription activation	https://www.nature.com/articles/ncomms11687
+IPR038765	Papain-like cysteine peptidase superfamily	Catalytic	Peptidase	Catalytic	
+IPR012337	Ribonuclease H-like superfamily	Catalytic	Polynucleotidyl transferase	Catalytic	
+IPR012934	Zinc finger, AD-type	Protein-binding	Homodimerization	Dimerization	
+IPR034091	BTBD9, BACK-like domain	Protein-binding	Homo-oligomerization; Ubiquitin ligase binding	Oligomerization; Protein binding	
+IPR042580	AIRE, PHD finger 2	Protein-binding	Transcription activation	Transcription activation	https://www.pnas.org/content/110/5/1833
+IPR042688	Lmx1a, first LIM domain	Protein-binding	Protein binding	Protein binding	
+IPR042693	ETS-related transcription factor Elf-3, pointed domain	Protein-binding	Protein binding	Protein binding	
+IPR041175	VLRF1/Vms1	Unclear	Unspecified	Unspecified	
+IPR041540	Vms1-associating treble clef domain	Unclear	Unspecified	Unspecified	
+IPR003655	Krueppel-associated box-related	Protein-binding	Meiosis facilitation	Protein binding	https://link.springer.com/article/10.1007%2Fs00412-017-0631-z
+IPR021934	Sox, C-terminal	Protein-binding	Transcription activation	Transcription activation	
+IPR033392	Sox 7/17/18, central domain	?Protein-binding	Transcription activation	Transcription activation	https://academic.oup.com/nar/article/23/14/2626/1016895 ; https://www.sciencedirect.com/science/article/pii/S0006291X07012879
+IPR010533	Vertebrate interleukin-3 regulated transcription factor	Protein-binding	Transcription repression	Transcription repression	https://academic.oup.com/nar/article/22/1/59/2358977 ; https://www.nature.com/articles/s12276-019-0280-9
+IPR022755	Zinc finger, double-stranded RNA binding	RNA-binding; RNA/DNA hybrid-binding	RNA-binding; RNA/DNA hybrid-binding	RNA-binding; RNA / DNA hybrid-binding	
+IPR022129	Transcriptional repressor NocA-like	Unclear	Unspecified	Unspecified	
+IPR028187	STAT6, C-terminal	Protein-binding	Transcription activation	Transcription activation	
+IPR035857	STAT6, SH2 domain	Protein-binding	Dimerization	Dimerization	https://www.pnas.org/content/105/27/9238
+IPR041888	ZN598/Hel2, RING finger	Protein-binding	Protein binding	Protein binding	
+IPR021896	Transposase protein	Unclear	Unspecified	Unspecified	
+IPR035855	STAT3, SH2 domain	Protein-binding	Dimerization	Dimerization	https://www.pnas.org/content/105/27/9238
+IPR001103	Androgen receptor	Protein-binding	Transcription activation	Transcription activation	
+IPR034731	Zinc finger CCHC FOG-type	Protein-binding	Dimerization	Dimerization	GATA-binding
+IPR000684	RNA polymerase II, heptapeptide repeat, eukaryotic	Protein-binding; DBD	Transcription regulation; DBD	Transcription regulation; DBD	
+IPR022137	Protein of unknown function DUF3669, zinc finger protein	Protein-binding	Dimerization	Dimerization	
+IPR022756	Signal transducer and activation of transcription 2, C-terminal	Protein-binding	Transcription activation	Transcription activation	https://www.sciencedirect.com/science/article/pii/S0021925819646788 ; https://www.nature.com/articles/s12276-020-00506-6
+IPR035854	STAT2, SH2 domain	Protein-binding	Dimerization	Dimerization	https://www.pnas.org/content/105/27/9238
+IPR035886	STAT5b, SH2 domain	Protein-binding	Dimerization	Dimerization	https://www.pnas.org/content/105/27/9238
+IPR032060	Domain of unknown function DUF4801	Unclear	Unspecified	Unspecified	
+IPR040380	HAKAI-like, RING finger, HC subclass	Protein-binding	Dimerization	Dimerization	
+IPR014878	Domain of unknown function DUF1794	Ligand-binding	Heme binding	Ligand binding	
+IPR002893	Zinc finger, MYND-type	Protein-binding	Transcription repression	Transcription repression	
+IPR000976	Wilm's tumour protein, N-terminal	Protein-binding	Dimerization; Transcription regulation	Dimerization; Transcription regulation	https://www.sciencedirect.com/science/article/pii/S0968000498012778
+IPR025799	Protein arginine N-methyltransferase	Unclear	Unspecified	Unspecified	
+IPR031940	Domain of unknown function DUF4772	Unclear	Unspecified	Unspecified	
+IPR016024	Armadillo-type fold	Protein / Nucleic acid-binding	Protein / Nucleic acid binding	Protein / Nucleic acid binding	
+IPR028104	Protein of unknown function DUF4553	Unclear	Unspecified	Unspecified	
+IPR036638	Helix-loop-helix DNA-binding domain superfamily	Protein-binding	Dimerization	Dimerization	
+IPR000467	G-patch domain	RNA-binding	RNA binding	RNA binding	
+IPR011989	Armadillo-like helical	Protein / Nucleic acid-binding	Protein / Nucleic acid binding	Protein / Nucleic acid binding	
+IPR028022	Protein of unknown function DUF4600	Unclear	Unspecified	Unspecified	
+IPR012955	CASP, C-terminal	?Protein/Lipid-binding	Transmembrane domain	?Protein / Lipid-binding	https://www.molbiolcell.org/doi/10.1091/mbc.e02-06-0349
+IPR041959	KMT2B, ePHD domain	Unclear	Unspecified	Unspecified	
+IPR036427	Bromodomain-like superfamily	Protein-binding	Histone acetylated lysine binding	Histone binding	

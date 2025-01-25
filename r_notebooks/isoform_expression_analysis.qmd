@@ -2,7 +2,7 @@
 title: "Isoform expression analysis"
 author: "Sviatoslav Sidorov"
 format: html
-editor: visual
+editor: source
 ---
 
 ## Load libraries
@@ -26,7 +26,7 @@ expr.tissue.fraction = 0.2 # Fraction of tissues where an isoform is expressed t
 Generate the sets of DBD- and DBD+ isoforms:
 
 ```{r}
-tf.isoform.ndbds = read.delim("../../data/results/base_dbd_expression_analysis_table.tsv")
+tf.isoform.ndbds = read.delim("../results/domains/base_dbd_expression_analysis_table.tsv")
 
 dbdneg.isoforms = tf.isoform.ndbds %>%
   filter(n_dbd == 0) %>%
@@ -47,7 +47,7 @@ cat("Number of DBD+ isoforms    :", length(dbdpos.isoforms), "\n")
 Load the expression data:
 
 ```{r}
-tf.isoforms.expr = readRDS("../../data/results/gtex8_processed/tf_isoforms_expr_ids.rds")
+tf.isoforms.expr = readRDS("../results/gtex8_processed/tf_isoforms_expr_ids.rds")
 ```
 
 Calculate and plot the proportions of expressed DBD- and DBD+ isoforms:

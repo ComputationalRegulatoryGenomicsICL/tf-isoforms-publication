@@ -2,7 +2,7 @@
 title: "Comparison of DBD+ and DBD- isoforms"
 author: "Sviatoslav Sidorov"
 format: html
-editor: visual
+editor: source
 ---
 
 ## Load libraries

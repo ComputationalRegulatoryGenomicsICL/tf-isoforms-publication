@@ -17,15 +17,15 @@ library(ggplot2)
 Summarise functional types of domains in expressed DBD- isoforms:
 
 ```{r, include=T}
-domain_functional_classification = read.delim("../../data/results/Other_domains_manually_curated_filled_generalized.tsv")
+domain_functional_classification = read.delim("../results/Other_domains_manually_curated_filled_generalized.tsv")
 
-tf.isoform.ndbds = read.delim("../../data/results/base_dbd_expression_analysis_table.tsv")
+tf.isoform.ndbds = read.delim("../results/base_dbd_expression_analysis_table.tsv")
 
-dbdneg.isoforms.expr = readRDS("../../data/results/dbdneg_isoforms_expr.rds")
+dbdneg.isoforms.expr = readRDS("../results/dbdneg_isoforms_expr.rds")
 
-dbdpos.isoforms.expr = readRDS("../../data/results/dbdpos_isoforms_expr.rds")
+dbdpos.isoforms.expr = readRDS("../results/dbdpos_isoforms_expr.rds")
 
-tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl = read.delim("../../data/results/tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl.tsv")
+tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl = read.delim("../results/domains/tf_coding_transcripts_final_ens99_with_fam_names_corrected.with_tsl.tsv")
 
 dbdminus.domain.table = tf.isoform.ndbds %>%
   filter(n_dbd == 0) %>%
@@ -73,7 +73,7 @@ saveRDS(dbdminus.domain.table.per_function,
 Print the numbers of expressed DBD- isoforms produced by C2H2 ZF genes and other TF genes:
 
 ```{r}
-dbdminus.domain.table.per_function = readRDS("../../data/results/dbdminus_domain_table_per_function_rerun.rds")
+dbdminus.domain.table.per_function = readRDS("../results/dbdminus_domain_table_per_function_rerun.rds")
 
 dbdneg.isoforms.expr.c2h2zf.n = dbdminus.domain.table.per_function %>%
   filter(tf_family == "C2H2 ZF") %>%

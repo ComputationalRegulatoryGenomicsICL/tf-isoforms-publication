@@ -4470,7 +4470,6 @@ write.table(table_s3,
 
 ```
 
-
 ## Assess DBD presence and absence in TF isoforms
 
 Alternative splicing can potentially remove all DBDs from a TF. So let us find how many TFs have at least one isoform without DBDs.
